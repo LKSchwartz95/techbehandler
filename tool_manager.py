@@ -83,6 +83,19 @@ class ToolManagerDialog(QDialog):
         self.download_thread, self.download_worker = None, None
         self.load_tools()
 
+    def _find_installed_tool_dir(self, tool):
+        """Returns a matching installation directory if the tool is already installed."""
+        install_path = PROJECT_ROOT / tool.get("install_path")
+        if install_path.exists() and any(install_path.iterdir()):
+            return install_path
+
+        if tool.get("id") == "wireshark":
+            pattern = f"wireshark-*-{tool.get('platform')}"
+            for path in TOOLS_DIR.glob(pattern):
+                if path.exists() and any(path.iterdir()):
+                    return path
+        return None
+
     def load_tools(self):
         """
         Populates the table with tools from the manifest and checks their installation status.
@@ -115,12 +128,12 @@ class ToolManagerDialog(QDialog):
             self.table.setItem(row_index, 0, QTableWidgetItem(tool.get("name")))
             self.table.setItem(row_index, 1, QTableWidgetItem(tool.get("version")))
             self.table.setItem(row_index, 2, QTableWidgetItem(tool.get("platform")))
-            install_path = PROJECT_ROOT / tool.get("install_path")
-            
+
+            install_dir = self._find_installed_tool_dir(tool)
             status_item = QTableWidgetItem()
             action_button = QPushButton()
-            
-            if install_path.exists() and any(install_path.iterdir()):
+
+            if install_dir is not None:
                 status_item.setText("Installed")
                 status_item.setForeground(Qt.GlobalColor.darkGreen)
                 action_button.setText("Re-install")
@@ -128,7 +141,7 @@ class ToolManagerDialog(QDialog):
                 status_item.setText("Not Installed")
                 status_item.setForeground(Qt.GlobalColor.red)
                 action_button.setText("Download & Install")
-                
+
             self.table.setItem(row_index, 3, status_item)
             action_button.clicked.connect(lambda checked, t=tool, r=row_index: self.start_download(t, r))
             self.table.setCellWidget(row_index, 4, action_button)
