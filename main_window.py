@@ -14,10 +14,11 @@ from PySide6.QtWidgets import (
     QWidget, QPushButton, QVBoxLayout, QHBoxLayout, QGridLayout,
     QFileDialog, QSpinBox, QLabel, QPlainTextEdit, QInputDialog,
     QLineEdit, QComboBox, QMessageBox, QTextEdit, QProgressBar,
-    QCheckBox, QGroupBox, QFormLayout, QDoubleSpinBox, QMenuBar, QTabWidget, QApplication
+    QCheckBox, QGroupBox, QFormLayout, QDoubleSpinBox, QMenuBar,
+    QTabWidget, QApplication, QScrollArea, QSizePolicy
 )
-from PySide6.QtCore import QProcess, QProcessEnvironment, QTimer, Qt, QUrl
-from PySide6.QtGui import QDesktopServices, QAction
+from PySide6.QtCore import QProcess, QProcessEnvironment, QTimer, Qt, QUrl, QSettings
+from PySide6.QtGui import QDesktopServices, QAction, QGuiApplication
 
 # Import the refactored modules
 import config_handler
@@ -38,8 +39,17 @@ class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("DumpBehandler Control Panel")
-        self.resize(950, 800) 
-        self.setAcceptDrops(True) 
+
+        # Restore previous geometry if available, otherwise size relative to the
+        # current screen to ensure it fits on small displays.
+        self.app_settings = QSettings("techbehandler", "DumpBehandler")
+        if not self.restoreGeometry(self.app_settings.value("geometry", b"")):
+            screen_geo = QGuiApplication.primaryScreen().availableGeometry()
+            default_w = min(950, int(screen_geo.width() * 0.9))
+            default_h = min(800, int(screen_geo.height() * 0.9))
+            self.resize(default_w, default_h)
+
+        self.setAcceptDrops(True)
         
         self.settings = {}
         self.current_prompts_list = []
@@ -101,7 +111,11 @@ class MainWindow(QWidget):
         self.clear_console_btn.clicked.connect(self.console.clear)
 
     def _create_analysis_control_tab(self):
+        # Use a scroll area so the UI remains usable on small screens.
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
         tab_widget = QWidget()
+        scroll.setWidget(tab_widget)
         main_layout = QVBoxLayout(tab_widget)
 
         top_section_widget = QWidget()
@@ -138,6 +152,7 @@ class MainWindow(QWidget):
         self.prompt_selector_combo.setToolTip("Select a saved prompt template.")
         self.prompt_template_display = QTextEdit()
         self.prompt_template_display.setPlaceholderText("Prompt content will appear here.")
+        self.prompt_template_display.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.edit_current_prompt_btn = QPushButton("Update Selected Prompt")
         self.save_prompt_as_btn = QPushButton("Save as New...")
         self.delete_prompt_btn = QPushButton("Delete Prompt")
@@ -174,7 +189,7 @@ class MainWindow(QWidget):
         main_layout.addWidget(self.settings_tabs)
         main_layout.addStretch()
 
-        return tab_widget
+        return scroll
 
     def _create_dashboard_tab(self):
         tab_widget = QWidget()
@@ -238,6 +253,7 @@ class MainWindow(QWidget):
         self.console = QPlainTextEdit()
         self.console.setReadOnly(True)
         self.console.setStyleSheet("background-color: #2d2d2d; color: #f0f0f0; font-family: Consolas, 'Courier New', monospace;")
+        self.console.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         main_layout.addLayout(console_header_layout)
         main_layout.addWidget(self.console)
         return tab_widget
@@ -1126,10 +1142,12 @@ class MainWindow(QWidget):
     def append_console(self, txt): 
         self.console.appendPlainText(str(txt).rstrip('\r\n')); QApplication.processEvents()
         
-    def closeEvent(self, event): 
+    def closeEvent(self, event):
         self.append_console("Window closing. Saving settings & stopping processes...")
         self.save_settings_to_handler()
-        if self.guard_mode_timer.isActive(): self.guard_mode_timer.stop() 
+        # Persist window geometry so it can be restored on next launch
+        self.app_settings.setValue("geometry", self.saveGeometry())
+        if self.guard_mode_timer.isActive(): self.guard_mode_timer.stop()
         if self.analysis_proc and self.analysis_proc.state() != QProcess.NotRunning: self.analysis_proc.kill(); self.analysis_proc.waitForFinished(3000)
         if self.dashboard_proc and self.dashboard_proc.state() != QProcess.NotRunning: self.dashboard_proc.kill(); self.dashboard_proc.waitForFinished(3000)
         if self.pull_model_proc and self.pull_model_proc.state() != QProcess.NotRunning: self.pull_model_proc.kill(); self.pull_model_proc.waitForFinished(3000)
