@@ -3,12 +3,14 @@ import os
 import time
 import asyncio
 from pathlib import Path
+import pyshark
 from pyshark.tshark.tshark import get_tshark_interfaces
 
 from PySide6.QtCore import QObject, Signal, QThread
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QFormLayout, QComboBox, QSpinBox,
-    QPushButton, QLabel, QMessageBox, QApplication
+    QPushButton, QLabel, QMessageBox, QApplication, QLineEdit,
+    QFileDialog, QHBoxLayout
 )
 
 # This allows the script to find the project root, even when imported by another script
@@ -25,12 +27,16 @@ class CaptureWorker(QObject):
     progress = Signal(str)
     countdown = Signal(int)
 
-    def __init__(self, interface, duration, output_file, tshark_path):
+    def __init__(self, interface, duration, output_file, tshark_path,
+                 bpf_filter=None, packet_limit=None, filesize_limit=None):
         super().__init__()
         self.interface = interface
         self.duration = duration
         self.output_file = output_file
         self.tshark_path = tshark_path
+        self.bpf_filter = bpf_filter
+        self.packet_limit = packet_limit
+        self.filesize_limit = filesize_limit
         self.is_cancelled = False
     
     def run(self):
@@ -47,10 +53,17 @@ class CaptureWorker(QObject):
             # ### DEFINITIVE BUG FIX ###
             # We no longer use the 'output_file' parameter of pyshark as it can be unreliable.
             # Instead, we pass the -w argument directly to tshark for maximum reliability.
+            custom_params = ['-w', self.output_file]
+            if self.packet_limit:
+                custom_params.extend(['-c', str(self.packet_limit)])
+            if self.filesize_limit:
+                custom_params.extend(['-a', f'filesize:{self.filesize_limit}'])
+
             capture = pyshark.LiveCapture(
                 interface=self.interface,
                 tshark_path=self.tshark_path,
-                custom_parameters=['-w', self.output_file]
+                bpf_filter=self.bpf_filter,
+                custom_parameters=custom_params
             )
 
             # The sniff process starts in the background. We wait for the duration.
@@ -123,6 +136,28 @@ class LiveCaptureDialog(QDialog):
         self.duration_spinbox.setValue(30)
         self.duration_spinbox.setSuffix(" seconds")
         form_layout.addRow("Capture Duration:", self.duration_spinbox)
+
+        self.filter_edit = QLineEdit()
+        form_layout.addRow("BPF Filter:", self.filter_edit)
+
+        self.output_edit = QLineEdit()
+        browse_btn = QPushButton("Browse")
+        browse_btn.clicked.connect(self.browse_output_file)
+        output_layout = QHBoxLayout()
+        output_layout.addWidget(self.output_edit)
+        output_layout.addWidget(browse_btn)
+        form_layout.addRow("Output File:", output_layout)
+
+        self.packet_spinbox = QSpinBox()
+        self.packet_spinbox.setRange(0, 1000000)
+        self.packet_spinbox.setSpecialValueText("Unlimited")
+        form_layout.addRow("Max Packets:", self.packet_spinbox)
+
+        self.filesize_spinbox = QSpinBox()
+        self.filesize_spinbox.setRange(0, 10240)
+        self.filesize_spinbox.setSuffix(" MB")
+        self.filesize_spinbox.setSpecialValueText("Unlimited")
+        form_layout.addRow("Max File Size:", self.filesize_spinbox)
         self.layout.addLayout(form_layout)
 
         self.start_button = QPushButton("Start Capture")
@@ -134,6 +169,11 @@ class LiveCaptureDialog(QDialog):
         self.save_path = ""
 
         self.load_interfaces()
+
+    def browse_output_file(self):
+        path, _ = QFileDialog.getSaveFileName(self, "Select Capture File", str(PROJECT_ROOT), "PCAP Files (*.pcapng *.pcap)")
+        if path:
+            self.output_edit.setText(path)
 
     def load_interfaces(self):
         self.start_button.setEnabled(False)
@@ -159,24 +199,42 @@ class LiveCaptureDialog(QDialog):
             return
 
         duration = self.duration_spinbox.value()
-        
-        # Automatically create a run folder and define the save path
-        try:
-            run_name = f"live_capture_{time.strftime('%Y%m%d-%H%M%S')}"
-            run_dir = RESULTAT_DIR / run_name
-            run_dir.mkdir(parents=True, exist_ok=True)
-            self.save_path = str(run_dir / "capture.pcapng")
-        except OSError as e:
-            QMessageBox.critical(self, "Directory Error", f"Could not create run directory: {e}")
-            return
-        
+
+        output_path = self.output_edit.text().strip()
+        if not output_path:
+            try:
+                run_name = f"live_capture_{time.strftime('%Y%m%d-%H%M%S')}"
+                run_dir = RESULTAT_DIR / run_name
+                run_dir.mkdir(parents=True, exist_ok=True)
+                output_path = str(run_dir / "capture.pcapng")
+            except OSError as e:
+                QMessageBox.critical(self, "Directory Error", f"Could not create run directory: {e}")
+                return
+
+        self.save_path = output_path
         self.status_label.setText(f"Will save capture to: {self.save_path}")
 
         self.start_button.setEnabled(False)
         self.interface_combo.setEnabled(False)
         self.duration_spinbox.setEnabled(False)
+        self.filter_edit.setEnabled(False)
+        self.output_edit.setEnabled(False)
+        self.packet_spinbox.setEnabled(False)
+        self.filesize_spinbox.setEnabled(False)
         
-        self.capture_worker = CaptureWorker(interface, duration, self.save_path, self.tshark_path)
+        bpf_filter = self.filter_edit.text().strip() or None
+        packet_limit = self.packet_spinbox.value() or None
+        filesize_limit = self.filesize_spinbox.value() or None
+
+        self.capture_worker = CaptureWorker(
+            interface,
+            duration,
+            self.save_path,
+            self.tshark_path,
+            bpf_filter=bpf_filter,
+            packet_limit=packet_limit,
+            filesize_limit=filesize_limit,
+        )
         self.capture_thread = QThread()
         self.capture_worker.moveToThread(self.capture_thread)
 
@@ -204,6 +262,10 @@ class LiveCaptureDialog(QDialog):
         self.start_button.setEnabled(True)
         self.interface_combo.setEnabled(True)
         self.duration_spinbox.setEnabled(True)
+        self.filter_edit.setEnabled(True)
+        self.output_edit.setEnabled(True)
+        self.packet_spinbox.setEnabled(True)
+        self.filesize_spinbox.setEnabled(True)
         if self.capture_thread and self.capture_thread.isRunning():
             self.capture_thread.quit()
             self.capture_thread.wait()
