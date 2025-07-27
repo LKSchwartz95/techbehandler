@@ -394,6 +394,10 @@ class MainWindow(QWidget):
                 if launcher_path.is_file():
                     self.append_console(f"Using Wireshark installation found at: {launcher_path}")
                     return str(launcher_path)
+                nested = next(path.rglob(binary), None)
+                if nested:
+                    self.append_console(f"Using Wireshark installation found at: {nested}")
+                    return str(nested)
 
             # Fall back to the manifest-defined location
             if TOOLS_MANIFEST_PATH.exists():
@@ -406,6 +410,10 @@ class MainWindow(QWidget):
                         if launcher_path.is_file():
                             self.append_console(f"Using managed Wireshark (tshark) found at: {launcher_path}")
                             return str(launcher_path)
+                        nested = next(install_path.rglob(binary), None)
+                        if nested:
+                            self.append_console(f"Using managed Wireshark (tshark) found at: {nested}")
+                            return str(nested)
 
             # Last resort: system PATH
             tshark_path = shutil.which("tshark")

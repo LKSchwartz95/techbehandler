@@ -34,7 +34,7 @@
       "platform": "win64",
       "url": "https://www.wireshark.org/download/win64/WiresharkPortable64_4.2.5.exe",
       "install_path": "tools/wireshark-4.2.5-win64",
-      "launcher_relative_path": "tshark.exe"
+      "launcher_relative_path": "Wireshark/tshark.exe"
     },
     {
       "id": "wireshark",
