@@ -152,6 +152,21 @@
                         </div>
                     </div>
 
+                    <!-- Notes Accordion Item -->
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseNotes" aria-expanded="false" aria-controls="collapseNotes">
+                                <i class="bi bi-journal-text me-2"></i>Run Notes
+                            </button>
+                        </h2>
+                        <div id="collapseNotes" class="accordion-collapse collapse" data-bs-parent="#detailsAccordion">
+                            <div class="accordion-body">
+                                <textarea id="notesTextarea" class="form-control mb-2" rows="4" placeholder="Add notes...">{{ user_notes }}</textarea>
+                                <button id="saveNotesBtn" class="btn btn-sm btn-primary">Save Notes</button>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- MAT Suspects Accordion Item -->
                     {% if 'not available' not in mat_problem_suspect_html %}
                     <div class="accordion-item">
@@ -180,10 +195,14 @@
                         </h2>
                         <div id="collapseRawData" class="accordion-collapse collapse" data-bs-parent="#detailsAccordion">
                             <div class="accordion-body" style="max-height: 500px; overflow-y: auto;">
+                                <div class="input-group input-group-sm mb-2">
+                                    <span class="input-group-text">Search</span>
+                                    <input id="rawSearchInput" type="text" class="form-control" placeholder="Find in data...">
+                                </div>
                                 <h6>LLM Parameters Used</h6>
                                 <pre><code>{{ llm_params_json }}</code></pre>
                                 <h6 class="mt-3">Diagnostic Data</h6>
-                                <pre><code>{{ thread_dump_details }}</code></pre>
+                                <pre id="diagnosticPre"><code>{{ thread_dump_details }}</code></pre>
                             </div>
                         </div>
                     </div>
@@ -246,6 +265,24 @@
                     <div class="mb-3">
                         <label for="reevaluate-prompt-textarea" class="form-label">Prompt Content</label>
                         <textarea class="form-control" id="reevaluate-prompt-textarea" rows="8"></textarea>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col">
+                            <label for="param-temperature" class="form-label">Temperature</label>
+                            <input type="number" step="0.01" id="param-temperature" class="form-control" value="{{ default_llm_params.temperature }}">
+                        </div>
+                        <div class="col">
+                            <label for="param-top-p" class="form-label">Top P</label>
+                            <input type="number" step="0.01" id="param-top-p" class="form-control" value="{{ default_llm_params.top_p }}">
+                        </div>
+                        <div class="col">
+                            <label for="param-top-k" class="form-label">Top K</label>
+                            <input type="number" id="param-top-k" class="form-control" value="{{ default_llm_params.top_k }}">
+                        </div>
+                        <div class="col">
+                            <label for="param-num-predict" class="form-label">Max Tokens</label>
+                            <input type="number" id="param-num-predict" class="form-control" value="{{ default_llm_params.num_predict }}">
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -401,7 +438,13 @@
             const payload = {
                 model: modelSelect.value,
                 prompt_name: promptSelect.value,
-                prompt_template: promptTextarea.value
+                prompt_template: promptTextarea.value,
+                llm_params: {
+                    temperature: parseFloat(document.getElementById('param-temperature').value),
+                    top_p: parseFloat(document.getElementById('param-top-p').value),
+                    top_k: parseInt(document.getElementById('param-top-k').value),
+                    num_predict: parseInt(document.getElementById('param-num-predict').value)
+                }
             };
 
             try {
@@ -458,6 +501,31 @@
                 handleSendChat();
             }
         });
+
+        // Notes save
+        document.getElementById('saveNotesBtn').addEventListener('click', function() {
+            const notes = document.getElementById('notesTextarea').value;
+            fetch(`/api/run/${RUN_NAME}/set_notes`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({notes})
+            }).then(resp => resp.json()).then(data => {
+                if (!data.success) { alert('Error saving notes: ' + data.error); }
+            });
+        });
+
+        // Raw data search
+        const rawSearchInput = document.getElementById('rawSearchInput');
+        const diagnosticPre = document.getElementById('diagnosticPre');
+        const originalDiagnosticText = diagnosticPre.textContent;
+        function highlightSearch() {
+            const term = rawSearchInput.value.toLowerCase();
+            if (!term) { diagnosticPre.innerHTML = '<code>' + originalDiagnosticText.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</code>'; return; }
+            const escaped = originalDiagnosticText.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+            const regex = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+            diagnosticPre.innerHTML = '<code>' + escaped.replace(regex, m => '<mark>' + m + '</mark>') + '</code>';
+        }
+        rawSearchInput.addEventListener('input', highlightSearch);
     </script>
 </body>
 </html>

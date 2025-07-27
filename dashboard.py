@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # Filename: dashboard.py
-from flask import Flask, render_template, send_from_directory, abort, url_for, jsonify, request, Response
+from flask import (Flask, render_template, send_from_directory, abort, url_for,
+                   jsonify, request, Response, session, redirect)
 from xhtml2pdf import pisa
 from io import BytesIO
 from bs4 import BeautifulSoup
@@ -18,6 +19,10 @@ from pathlib import Path
 import ollama_client 
 
 app = Flask(__name__)
+app.secret_key = os.getenv("DASHBOARD_SECRET_KEY", "change_me")
+
+AUTH_USERNAME = os.getenv("DASHBOARD_USERNAME")
+AUTH_PASSWORD = os.getenv("DASHBOARD_PASSWORD")
 
 OLLAMA_MODEL_DISPLAY_FALLBACK = "Unknown Model"
 USER_STATUS_PENDING = "pending"
@@ -27,6 +32,35 @@ DASHBOARD_PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE_PATH_DASHBOARD = os.path.join(DASHBOARD_PROJECT_ROOT, "config.json")
 RESULTAT_DIR_DASHBOARD = os.path.join(os.getcwd(), "Resultat") 
 DASHBOARD_LOG_FILE = os.path.join(os.getcwd(), "dashboard_log.txt")
+
+
+@app.before_request
+def require_login():
+    """Require login if credentials are set via environment variables."""
+    if AUTH_USERNAME and AUTH_PASSWORD:
+        if request.endpoint not in {"login", "static"} and not session.get("logged_in"):
+            return redirect(url_for("login", next=request.path))
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if not (AUTH_USERNAME and AUTH_PASSWORD):
+        return redirect(url_for("index"))
+    error = None
+    if request.method == "POST":
+        if (request.form.get("username") == AUTH_USERNAME and
+                request.form.get("password") == AUTH_PASSWORD):
+            session["logged_in"] = True
+            next_url = request.args.get("next") or url_for("index")
+            return redirect(next_url)
+        error = "Invalid credentials"
+    return render_template("login.html", error=error)
+
+
+@app.route("/logout")
+def logout():
+    session.pop("logged_in", None)
+    return redirect(url_for("login"))
 
 def get_config():
     """Loads the entire config file."""
@@ -118,7 +152,8 @@ def _load_run_data_common(run_dir_path, run_name_for_log):
         "llm_analysis_html": "<p><em>Analysis N/A</em></p>", "metadata_error": None, "md_error": None, 
         "raw_md_snippet_on_load": "N/A", "md_filename_processed": None, "user_status": USER_STATUS_PENDING,
         "raw_llm_analysis_text": None, "raw_diagnostic_text": None,
-        "llm_generated_tags": [], "llm_params_json": "{}"
+        "llm_generated_tags": [], "llm_params_json": "{}",
+        "user_notes": ""
     }
     metadata_path = os.path.join(run_dir_path, "run_metadata.json")
     if os.path.isfile(metadata_path):
@@ -136,6 +171,7 @@ def _load_run_data_common(run_dir_path, run_name_for_log):
             data["user_status"] = metadata.get("user_status", USER_STATUS_PENDING)
             data["llm_generated_tags"] = metadata.get("llm_generated_tags", [])
             data["llm_params_json"] = json.dumps(metadata.get("llm_parameters_used", {}), indent=4)
+            data["user_notes"] = metadata.get("user_notes", "")
         except Exception as e: log_dashboard_error(f"Err parsing metadata.json for {run_name_for_log}: {e}"); data["metadata_error"] = f"Error parsing: {e}"
     else: data["metadata_error"] = "run_metadata.json not found"
 
@@ -296,6 +332,8 @@ def view_run(run):
         user_status=run_info.get("user_status"),
         llm_tags=run_info.get("llm_generated_tags", []),
         llm_params_json=run_info.get("llm_params_json", "{}"),
+        user_notes=run_info.get("user_notes", ""),
+        default_llm_params=get_llm_parameters_from_config(),
         initial_llm_analysis_text_for_chat=run_info.get("raw_llm_analysis_text", None),
         initial_diagnostic_text_for_chat=run_info.get("raw_diagnostic_text", None),
         saved_prompts=prompts_for_template,
@@ -382,6 +420,31 @@ def set_run_status(run_name):
         log_dashboard_error(f"Run '{run_name}' status updated to '{new_status}'.")
         return jsonify({"success": True, "new_status": new_status})
     except Exception as e: log_dashboard_error(f"Error updating status for run '{run_name}': {e}"); return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/run/<run_name>/set_notes", methods=["POST"])
+def set_run_notes(run_name):
+    """Update user notes for a run."""
+    ensure_resultat_dir()
+    if ".." in run_name or "/" in run_name or "\\" in run_name:
+        abort(403)
+    notes = request.json.get("notes", "")
+    run_dir_path = os.path.join(RESULTAT_DIR_DASHBOARD, run_name)
+    metadata_path = os.path.join(run_dir_path, "run_metadata.json")
+    if not os.path.isdir(run_dir_path) or not os.path.isfile(metadata_path):
+        return jsonify({"success": False, "error": "Run or metadata not found"}), 404
+    try:
+        with open(metadata_path, "r+", encoding="utf-8") as f:
+            metadata = json.load(f)
+            metadata["user_notes"] = notes
+            metadata["user_notes_updated_utc"] = datetime.now(timezone.utc).isoformat()
+            f.seek(0)
+            json.dump(metadata, f, indent=4)
+            f.truncate()
+        return jsonify({"success": True})
+    except Exception as e:
+        log_dashboard_error(f"Error updating notes for run '{run_name}': {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route("/api/run/<run_name>/delete", methods=["POST"])
 def delete_run_folder(run_name):
@@ -497,6 +560,7 @@ def reevaluate_run(run_name):
     new_prompt_name = data.get("prompt_name")
     new_prompt_template = data.get("prompt_template")
     model_to_use = data.get("model")
+    override_params = data.get("llm_params", {})
 
     if not new_prompt_template or not model_to_use or not new_prompt_name:
         return jsonify({"success": False, "error": "A new prompt, template, and model are required."}), 400
@@ -522,6 +586,8 @@ def reevaluate_run(run_name):
     # Call the LLM
     llm_params = get_llm_parameters_from_config()
     api_call_options = {k: v for k, v in llm_params.items() if k != "default_ollama_model_for_dashboard"}
+    if isinstance(override_params, dict):
+        api_call_options.update({k: v for k, v in override_params.items() if v is not None})
     new_analysis_text, response_details = ollama_client.ollama_api_generate(model_tag=model_to_use, prompt_text=final_prompt, llm_parameters=api_call_options)
 
     if not new_analysis_text:
