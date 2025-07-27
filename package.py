@@ -35,7 +35,7 @@ EXCLUDE_PATTERNS = [
     ".idea",                # PyCharm/IntelliJ settings
     "*.log",                # Log files (e.g., monitor_log.txt)
     "*.zip",                # Don't include previous zip files (including itself)
-    "package_app.py",       # This script itself
+    "package.py",           # The packaging script itself
     "ollama_client_log.txt", # Specific log file
     "dashboard_log.txt",    # Specific log file
     "monitor_log.txt"       # Specific log file
