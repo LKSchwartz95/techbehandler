@@ -33,3 +33,10 @@ def test_security_scans(tmp_path: Path):
 def test_log_aggregation(tmp_path: Path):
     log_file = log_aggregator.gather_system_logs(tmp_path)
     assert Path(log_file).exists()
+
+
+def test_batch_launcher_contains_setup():
+    batch_path = ROOT_DIR / "run_dumpbehandler.bat"
+    content = batch_path.read_text()
+    assert "venv" in content
+    assert "pip install" in content
