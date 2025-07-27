@@ -473,7 +473,7 @@ def get_reevaluate_data(run_name):
     mat_summary = ""
     if "hprof" in run_data.get("analysis_type", ""):
         try:
-            # Re-use the same logic from monitor.py to extract summary
+            # Reuse the same logic from monitor.py to extract summary
             from monitor import extract_mat_suspect_text
             mat_summary = extract_mat_suspect_text(run_dir)
         except Exception as e:
