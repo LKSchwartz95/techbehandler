@@ -72,8 +72,14 @@ Your response:
     },
     "llm_params_group_checked": False,
     "wireshark_tasks": {
-        "tcp_conv": True, "ip_conv": False, "dns_stats": True, 
-        "http_reqs": True, "tls_alerts": True, "slow_resps": False
+        "tcp_conv": True,
+        "ip_conv": False,
+        "dns_stats": True,
+        "http_reqs": True,
+        "tls_alerts": True,
+        "slow_resps": False,
+        "proto_hier": False,
+        "tcp_errors": False
     }
 }
 

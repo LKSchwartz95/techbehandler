@@ -64,6 +64,8 @@
         "dns_stats": true,
         "http_reqs": true,
         "tls_alerts": true,
-        "slow_resps": true
+        "slow_resps": true,
+        "proto_hier": true,
+        "tcp_errors": true
     }
 }

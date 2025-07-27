@@ -133,7 +133,9 @@ def run_tshark_task(pcap_path, tshark_exe_path, task_id):
         "dns_stats":  {"cmd": ["-q", "-z", "dns,tree"], "title": "DNS Statistics"},
         "http_reqs":  {"cmd": ["-Y", "http.request", "-T", "fields", "-e", "http.host", "-e", "http.request.method", "-e", "http.request.uri"], "title": "HTTP Requests"},
         "tls_alerts": {"cmd": ["-Y", "tls.alert_message", "-T", "fields", "-e", "frame.number", "-e", "ip.src", "-e", "ip.dst", "-e", "tls.alert_message.desc"], "title": "TLS/SSL Alerts"},
-        "slow_resps": {"cmd": ["-Y", "tcp.time_delta > 0.2", "-T", "fields", "-e", "frame.number", "-e", "ip.src", "-e", "ip.dst", "-e", "tcp.time_delta"], "title": "Slow TCP Responses (>200ms)"}
+        "slow_resps": {"cmd": ["-Y", "tcp.time_delta > 0.2", "-T", "fields", "-e", "frame.number", "-e", "ip.src", "-e", "ip.dst", "-e", "tcp.time_delta"], "title": "Slow TCP Responses (>200ms)"},
+        "proto_hier": {"cmd": ["-q", "-z", "io,phs"], "title": "Protocol Hierarchy"},
+        "tcp_errors": {"cmd": ["-Y", "tcp.analysis.flags", "-T", "fields", "-e", "frame.number", "-e", "ip.src", "-e", "ip.dst", "-e", "tcp.analysis.flags"], "title": "TCP Errors"}
     }
 
     task = TSHARK_TASKS.get(task_id)

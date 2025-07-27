@@ -300,7 +300,9 @@ class MainWindow(QWidget):
             {"id": "dns_stats", "name": "DNS Statistics", "desc": "Analyze DNS queries and responses for errors."},
             {"id": "http_reqs", "name": "HTTP Requests", "desc": "Extract all HTTP/1.x requests (host, method, URI)."},
             {"id": "tls_alerts", "name": "TLS/SSL Alerts", "desc": "Scan for secure connection failures and warnings."},
-            {"id": "slow_resps", "name": "Slow TCP Responses", "desc": "Find TCP packets with a response time > 200ms."}
+            {"id": "slow_resps", "name": "Slow TCP Responses", "desc": "Find TCP packets with a response time > 200ms."},
+            {"id": "proto_hier", "name": "Protocol Hierarchy", "desc": "Display overall protocol hierarchy statistics."},
+            {"id": "tcp_errors", "name": "TCP Errors", "desc": "List packets flagged with tcp.analysis issues."}
         ]
 
         row, col = 0, 0
@@ -1071,7 +1073,8 @@ class MainWindow(QWidget):
     def _on_dashboard_error_output(self): 
         if not self.dashboard_proc: return
         data = self.dashboard_proc.readAllStandardError().data().decode(sys.stderr.encoding or "utf-8", errors="replace")
-        for line in data.splitlines(): self.append_console(f"DASHBOARD_ERR: {line.rstrip('\r\n')}")
+        for line in data.splitlines():
+            self.append_console(f"DASHBOARD_ERR: {line.rstrip()}")
     
     def _on_dashboard_finished(self, exit_code, exit_status): 
         status = "normally" if exit_status == QProcess.NormalExit else "crashed"; self.append_console(f"Dashboard finished ({status}) code {exit_code}"); self.dashboard_btn.setText("Launch Dashboard")
