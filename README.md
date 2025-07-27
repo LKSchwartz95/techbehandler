@@ -47,3 +47,13 @@ Guard Mode continuously monitors a chosen folder and automatically processes any
 The HTML templates backing the dashboard UI can be found under the [`templates`](templates/) directory, for example [index.html](templates/index.html) lists all recorded analysis runs.
 
 ## Packaging
+
+You can create a portable ZIP archive of the application using the provided
+`package.py` helper script:
+
+```bash
+python package.py
+```
+
+The script bundles all essential files while excluding caches and large
+artifacts, outputting a timestamped zip file in the project root.
