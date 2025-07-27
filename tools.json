@@ -1,0 +1,58 @@
+{
+  "tools": [
+    {
+      "id": "mat",
+      "name": "Eclipse Memory Analyzer",
+      "version": "1.14.0",
+      "platform": "win64",
+      "url": "https://www.eclipse.org/downloads/download.php?file=/mat/1.14.0/rcp/MemoryAnalyzer-1.14.0.202312061735-win32.win32.x86_64.zip",
+      "install_path": "tools/mat-1.14.0-win64",
+      "launcher_relative_path": "plugins/org.eclipse.equinox.launcher_*.jar"
+    },
+    {
+      "id": "mat",
+      "name": "Eclipse Memory Analyzer",
+      "version": "1.14.0",
+      "platform": "linux-x86_64",
+      "url": "https://www.eclipse.org/downloads/download.php?file=/mat/1.14.0/rcp/MemoryAnalyzer-1.14.0.202312061735-linux.gtk.x86_64.zip",
+      "install_path": "tools/mat-1.14.0-linux",
+      "launcher_relative_path": "plugins/org.eclipse.equinox.launcher_*.jar"
+    },
+    {
+      "id": "mat",
+      "name": "Eclipse Memory Analyzer",
+      "version": "1.14.0",
+      "platform": "macos-aarch64",
+      "url": "https://www.eclipse.org/downloads/download.php?file=/mat/1.14.0/rcp/MemoryAnalyzer-1.14.0.202312061735-macosx.cocoa.aarch64.zip",
+      "install_path": "tools/mat-1.14.0-macos",
+      "launcher_relative_path": "plugins/org.eclipse.equinox.launcher_*.jar"
+    },
+    {
+      "id": "wireshark",
+      "name": "Wireshark",
+      "version": "4.2.5",
+      "platform": "win64",
+      "url": "https://www.wireshark.org/download/win64/WiresharkPortable64_4.2.5.exe",
+      "install_path": "tools/wireshark-4.2.5-win64",
+      "launcher_relative_path": "tshark.exe"
+    },
+    {
+      "id": "wireshark",
+      "name": "Wireshark",
+      "version": "4.2.5",
+      "platform": "linux-x86_64",
+      "url": "https://www.wireshark.org/download/src/all-versions/wireshark-4.2.5.tar.xz",
+      "install_path": "tools/wireshark-4.2.5-linux",
+      "launcher_relative_path": "tshark"
+    },
+    {
+      "id": "wireshark",
+      "name": "Wireshark",
+      "version": "4.2.5",
+      "platform": "macos-aarch64",
+      "url": "https://www.wireshark.org/download/osx/Wireshark%204.2.5%20Intel%2064.dmg",
+      "install_path": "tools/wireshark-4.2.5-macos",
+      "launcher_relative_path": "tshark"
+    }
+  ]
+}
