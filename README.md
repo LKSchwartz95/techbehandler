@@ -7,6 +7,7 @@
 - Manage optional tools via the built in tool manager
 - Configurable prompt templates for LLM based analysis
 - System resource monitoring with psutil
+- Repeated metrics collection via `collect_metrics_periodically`
 - Optional security scans using lynis or osquery
 - Nmap network scanning integration
 - Aggregated system log collection

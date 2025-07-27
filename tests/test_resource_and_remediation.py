@@ -13,6 +13,7 @@ remediation_engine = importlib.util.module_from_spec(spec_re)
 spec_re.loader.exec_module(remediation_engine)
 
 collect_metrics = resource_monitor.collect_metrics
+collect_metrics_periodically = resource_monitor.collect_metrics_periodically
 generate_remediation = remediation_engine.generate_remediation
 
 
@@ -23,6 +24,15 @@ def test_collect_metrics(tmp_path: Path):
     with out_file.open() as f:
         data = json.loads(f.readline())
     assert metrics["cpu_percent"] == data["cpu_percent"]
+
+
+def test_collect_metrics_periodically(tmp_path: Path):
+    out_file = tmp_path / "metrics.jsonl"
+    results = collect_metrics_periodically(out_file, iterations=3, interval_seconds=0)
+    assert len(results) == 3
+    lines = out_file.read_text().strip().splitlines()
+    assert len(lines) == 3
+
 
 
 def test_generate_remediation(tmp_path: Path):
