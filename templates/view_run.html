@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Run: {{ run_name }} - DumpBehandler</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        body {
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", "Liberation Sans", Arial, sans-serif;
+            background-color: #f8f9fa;
+            color: #212529;
+        }
+        .container-fluid {
+            max-width: 1800px;
+        }
+        .card {
+            border: 1px solid #dee2e6;
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        }
+        .card-header {
+            background-color: #f8f9fa;
+            font-weight: 500;
+        }
+        h1.page-title {
+            font-weight: 300;
+        }
+        .tag {
+            font-size: 0.85em;
+            padding: 0.3em 0.75em;
+        }
+        pre, code {
+            font-family: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 0.9em;
+        }
+        .llm-analysis-body pre {
+             background-color: #212529;
+             color: #f8f9fa;
+             padding: 1rem;
+             border-radius: 0.375rem;
+        }
+        .accordion-body pre {
+            background-color: #f1f3f5;
+            padding: 1rem;
+            border-radius: 0.375rem;
+            border: 1px solid #dee2e6;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .chat-container { max-height: 600px; display: flex; flex-direction: column; }
+        .chat-box { flex-grow: 1; overflow-y: auto; background-color: #fff; padding: 10px; }
+        .chat-message { margin-bottom: 0.5rem; line-height: 1.4; }
+        .chat-message.user { display: flex; justify-content: flex-end; }
+        .chat-message.user .message-bubble { background-color: #0d6efd; color: white; }
+        .chat-message.assistant { display: flex; justify-content: flex-start; }
+        .chat-message.assistant .message-bubble { background-color: #e9ecef; color: #212529; }
+        .message-bubble { padding: 0.5rem 1rem; border-radius: 1rem; max-width: 85%; }
+        .message-bubble p:last-child { margin-bottom: 0; }
+        .message-bubble pre { font-size: 0.85em; }
+        .accordion-button:not(.collapsed) {
+            background-color: #e7f1ff;
+            color: #0c63e4;
+        }
+        .accordion-button:focus {
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid my-4">
+        <!-- Page Header -->
+        <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+            <h1 class="h2 page-title"><a href="/" class="text-decoration-none text-dark"><i class="bi bi-arrow-left-circle"></i></a> Run: <span id="run-name-header">{{ run_name }}</span></h1>
+            <div class="btn-toolbar mb-2 mb-md-0">
+                <button type="button" class="btn btn-sm btn-outline-primary me-2" data-bs-toggle="modal" data-bs-target="#reevaluateModal">
+                    <i class="bi bi-arrow-clockwise"></i> Re-evaluate with LLM
+                </button>
+                <div class="btn-group me-2">
+                    <button id="status-toggle-btn" type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                        Status: <span id="status-text">{{ user_status|capitalize }}</span>
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="#" onclick="setStatus('pending')">Pending</a></li>
+                        <li><a class="dropdown-item" href="#" onclick="setStatus('resolved')">Resolved</a></li>
+                    </ul>
+                </div>
+                <a href="{{ url_for('export_run_pdf', run=run_name) }}" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-file-earmark-pdf"></i> Export PDF
+                </a>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <!-- Main Content Column -->
+            <div class="col-lg-8">
+                <!-- LLM Analysis Card -->
+                <div class="card mb-4">
+                    <div class="card-header fs-5 d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-robot"></i> LLM Analysis</span>
+                        <small class="text-muted" id="model-used-display">Model: {{ model_used }}</small>
+                    </div>
+                    <div class="card-body llm-analysis-body">
+                        <div class="mb-3" id="tags-container">
+                            {% for tag in llm_tags %}
+                                <span class="badge rounded-pill text-bg-primary tag">{{ tag }}</span>
+                            {% else %}
+                                <span class="text-muted">No tags generated.</span>
+                            {% endfor %}
+                        </div>
+                        <hr>
+                        <div id="llm-analysis-content">
+                            {{ llm_analysis_html|safe }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Interactive Chat Card -->
+                <div class="card mb-4">
+                    <div class="card-header fs-5"><i class="bi bi-chat-dots"></i> Interactive Chat</div>
+                    <div class="card-body chat-container p-0">
+                        <div class="chat-box p-3">
+                            <!-- Messages will be appended here -->
+                        </div>
+                        <div class="p-3 border-top bg-light">
+                            <div class="input-group">
+                                <input type="text" id="chatInput" class="form-control" placeholder="Ask a follow-up question..." aria-label="User message">
+                                <button class="btn btn-primary" type="button" id="sendChatBtn"><i class="bi bi-send"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sidebar Column -->
+            <div class="col-lg-4">
+                <div class="accordion" id="detailsAccordion">
+                    <!-- Run Details Accordion Item -->
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseDetails" aria-expanded="true" aria-controls="collapseDetails">
+                                <i class="bi bi-info-circle me-2"></i>Run Details
+                            </button>
+                        </h2>
+                        <div id="collapseDetails" class="accordion-collapse collapse show" data-bs-parent="#detailsAccordion">
+                            <div class="card-body">
+                                <p class="mb-2"><strong>Input File:</strong><br><small class="text-muted">{{ hprof_source }}</small></p>
+                                <p class="mb-2"><strong>Timestamp:</strong><br>{{ run_time }}</p>
+                                <p class="mb-2"><strong>MAT Memory:</strong> {{ mat_memory_setting }} MB</p>
+                                <p class="mb-2"><strong>MAT Report Type:</strong> {{ mat_report_type_used }}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- MAT Suspects Accordion Item -->
+                    {% if 'not available' not in mat_problem_suspect_html %}
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseSuspects" aria-expanded="false" aria-controls="collapseSuspects">
+                                <i class="bi bi-search me-2"></i>MAT Problem Suspect Details
+                            </button>
+                        </h2>
+                        <div id="collapseSuspects" class="accordion-collapse collapse" data-bs-parent="#detailsAccordion">
+                            <div class="accordion-body" style="max-height: 400px; overflow-y: auto;">
+                                {% if mat_overview_pie_chart_url %}
+                                <img src="{{ mat_overview_pie_chart_url }}" class="img-fluid rounded mb-3" alt="MAT Pie Chart">
+                                {% endif %}
+                                {{ mat_problem_suspect_html|safe }}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Raw Data Accordion Item -->
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseRawData" aria-expanded="false" aria-controls="collapseRawData">
+                                <i class="bi bi-file-earmark-text me-2"></i>Raw Diagnostic Data
+                            </button>
+                        </h2>
+                        <div id="collapseRawData" class="accordion-collapse collapse" data-bs-parent="#detailsAccordion">
+                            <div class="accordion-body" style="max-height: 500px; overflow-y: auto;">
+                                <h6>LLM Parameters Used</h6>
+                                <pre><code>{{ llm_params_json }}</code></pre>
+                                <h6 class="mt-3">Diagnostic Data</h6>
+                                <pre><code>{{ thread_dump_details }}</code></pre>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Files Accordion Item -->
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseFiles" aria-expanded="false" aria-controls="collapseFiles">
+                                <i class="bi bi-folder2-open me-2"></i>Report Files
+                            </button>
+                        </h2>
+                        <div id="collapseFiles" class="accordion-collapse collapse" data-bs-parent="#detailsAccordion">
+                            <div class="list-group list-group-flush">
+                                {% if mat_report_entry_file %}
+                                    <a href="{{ url_for('get_file_from_run', run=run_name, filename=mat_report_entry_file) }}" target="_blank" class="list-group-item list-group-item-action"><i class="bi bi-file-earmark-code me-2"></i>{{ mat_report_index_link_text }}</a>
+                                    {% if 'not found' not in mat_report_toc_link_text|lower %}
+                                    <a href="{{ url_for('get_file_from_run', run=run_name, filename=mat_report_entry_file.replace('index.html', 'toc.html')) }}" target="_blank" class="list-group-item list-group-item-action"><i class="bi bi-list-ul me-2"></i>{{ mat_report_toc_link_text }}</a>
+                                    {% endif %}
+                                {% endif %}
+                                {% for file in other_run_files %}
+                                <a href="{{ url_for('get_file_from_run', run=run_name, filename=file) }}" target="_blank" class="list-group-item list-group-item-action"><i class="bi bi-file-text me-2"></i>{{ file }}</a>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Re-evaluate Modal -->
+    <div class="modal fade" id="reevaluateModal" tabindex="-1" aria-labelledby="reevaluateModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="reevaluateModalLabel"><i class="bi bi-arrow-clockwise"></i> Re-evaluate Run: {{ run_name }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="reevaluate-error-alert" class="alert alert-danger d-none" role="alert"></div>
+                    <p class="text-muted small">Select a new prompt and/or model to re-generate the analysis for this run. All existing diagnostic data will be used.</p>
+                    <div class="mb-3">
+                        <label for="reevaluate-model-select" class="form-label">LLM Model</label>
+                        <select class="form-select" id="reevaluate-model-select">
+                            {% for model in available_models %}
+                                <option value="{{ model }}">{{ model }}</option>
+                            {% else %}
+                                <option value="" disabled>No models found or Ollama is offline.</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                     <div class="mb-3">
+                        <label for="reevaluate-prompt-select" class="form-label">Prompt Template</label>
+                        <select class="form-select" id="reevaluate-prompt-select">
+                             {% for prompt in saved_prompts %}
+                                <option value="{{ prompt.name }}" data-template="{{ prompt.template }}">{{ prompt.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="reevaluate-prompt-textarea" class="form-label">Prompt Content</label>
+                        <textarea class="form-control" id="reevaluate-prompt-textarea" rows="8"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="start-reevaluation-btn">
+                        <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                        Start Re-evaluation
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const RUN_NAME = "{{ run_name }}";
+        const SAVED_PROMPTS = {{ saved_prompts|tojson|safe }};
+
+        // --- Status Update Logic ---
+        function setStatus(newStatus) {
+            fetch(`/api/run/${RUN_NAME}/set_status`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: newStatus })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const statusText = document.getElementById('status-text');
+                    statusText.textContent = data.new_status.charAt(0).toUpperCase() + data.new_status.slice(1);
+                } else {
+                    alert('Error updating status: ' + data.error);
+                }
+            });
+        }
+        
+        // --- Interactive Chat Logic ---
+        const chatBox = document.querySelector('.chat-box');
+        const chatInput = document.getElementById('chatInput');
+        const sendChatBtn = document.getElementById('sendChatBtn');
+        let chatHistory = [];
+
+        function addMessageToChat(role, content) {
+            const messageContainer = document.createElement('div');
+            messageContainer.className = `chat-message ${role}`;
+            
+            const bubbleDiv = document.createElement('div');
+            bubbleDiv.className = 'message-bubble';
+            
+            let htmlContent = content.replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">");
+            htmlContent = htmlContent.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            htmlContent = htmlContent.replace(/```([\s\S]*?)```/g, (match, p1) => `<pre class="bg-dark text-light p-2 rounded"><code>${p1.trim()}</code></pre>`);
+            htmlContent = htmlContent.replace(/`([^`]+)`/g, '<code>$1</code>');
+            bubbleDiv.innerHTML = htmlContent.replace(/\n/g, '<br>');
+            
+            messageContainer.appendChild(bubbleDiv);
+            chatBox.appendChild(messageContainer);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function initializeChat() {
+            const initialAnalysis = {{ initial_llm_analysis_text_for_chat|tojson|safe }};
+            const initialDiagnostic = {{ initial_diagnostic_text_for_chat|tojson|safe }};
+            
+            let systemPrompt = "You are a helpful expert assistant for performance analysis. The user is viewing a report. The initial LLM analysis and full diagnostic data are provided below for context. Answer the user's follow-up questions concisely based on this context. Do not repeat the full analysis unless asked.";
+            if (initialAnalysis) {
+                systemPrompt += "\n\n--- INITIAL LLM ANALYSIS ---\n" + initialAnalysis;
+            }
+            if (initialDiagnostic) {
+                systemPrompt += "\n\n--- DIAGNOSTIC DATA ---\n" + initialDiagnostic;
+            }
+            chatHistory.push({ role: 'system', content: systemPrompt });
+
+            let welcomeMessage = "I have the context of this run's analysis and diagnostic data. Ask me anything.";
+            chatHistory.push({ role: 'assistant', content: welcomeMessage });
+            addMessageToChat('assistant', welcomeMessage);
+        }
+
+        async function handleSendChat() {
+            const userMessage = chatInput.value.trim();
+            if (!userMessage) return;
+
+            addMessageToChat('user', userMessage);
+            chatHistory.push({ role: 'user', content: userMessage });
+            chatInput.value = '';
+            sendChatBtn.disabled = true;
+            chatInput.disabled = true;
+
+            try {
+                const response = await fetch(`/api/run/${RUN_NAME}/chat_interaction`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ history: chatHistory })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    addMessageToChat('assistant', data.response);
+                    chatHistory.push({ role: 'assistant', content: data.response });
+                } else {
+                    addMessageToChat('assistant', `Sorry, an error occurred: ${data.error}`);
+                }
+            } catch (error) {
+                addMessageToChat('assistant', `Sorry, a network error occurred: ${error}`);
+            } finally {
+                sendChatBtn.disabled = false;
+                chatInput.disabled = false;
+                chatInput.focus();
+            }
+        }
+        
+        // --- Re-evaluation Modal Logic ---
+        const reevaluateModalEl = document.getElementById('reevaluateModal');
+        const reevaluateModal = new bootstrap.Modal(reevaluateModalEl);
+        const startReevalBtn = document.getElementById('start-reevaluation-btn');
+        const modelSelect = document.getElementById('reevaluate-model-select');
+        const promptSelect = document.getElementById('reevaluate-prompt-select');
+        const promptTextarea = document.getElementById('reevaluate-prompt-textarea');
+        const errorAlert = document.getElementById('reevaluate-error-alert');
+
+        function updateReevalPromptTextarea() {
+            const selectedOption = promptSelect.options[promptSelect.selectedIndex];
+            if (selectedOption) {
+                promptTextarea.value = selectedOption.dataset.template || '';
+            }
+        }
+
+        reevaluateModalEl.addEventListener('show.bs.modal', async event => {
+            // Reset UI
+            errorAlert.classList.add('d-none');
+            startReevalBtn.disabled = false;
+            startReevalBtn.querySelector('.spinner-border').classList.add('d-none');
+            
+            // Set default model in dropdown to the one used in the run
+            const currentModel = "{{ model_used }}";
+            const modelOption = modelSelect.querySelector(`option[value="${currentModel}"]`);
+            if (modelOption) {
+                modelOption.selected = true;
+            }
+
+            // Set default prompt and update textarea
+            updateReevalPromptTextarea();
+        });
+
+        promptSelect.addEventListener('change', updateReevalPromptTextarea);
+
+        startReevalBtn.addEventListener('click', async () => {
+            const spinner = startReevalBtn.querySelector('.spinner-border');
+            spinner.classList.remove('d-none');
+            startReevalBtn.disabled = true;
+            errorAlert.classList.add('d-none');
+
+            const payload = {
+                model: modelSelect.value,
+                prompt_name: promptSelect.value,
+                prompt_template: promptTextarea.value
+            };
+
+            try {
+                const response = await fetch(`/api/run/${RUN_NAME}/re-evaluate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    // Update the main page with the new data
+                    document.getElementById('llm-analysis-content').innerHTML = data.new_analysis_html;
+                    document.getElementById('model-used-display').textContent = `Model: ${data.new_model}`;
+                    
+                    const tagsContainer = document.getElementById('tags-container');
+                    tagsContainer.innerHTML = '';
+                    if(data.new_tags && data.new_tags.length > 0) {
+                        data.new_tags.forEach(tag => {
+                            const tagEl = document.createElement('span');
+                            tagEl.className = 'badge rounded-pill text-bg-primary tag';
+                            tagEl.textContent = tag;
+                            tagsContainer.appendChild(tagEl);
+                        });
+                    } else {
+                        tagsContainer.innerHTML = '<span class="text-muted">No tags generated.</span>';
+                    }
+
+                    // Reload chat context with new analysis
+                    initializeChat();
+                    reevaluateModal.hide();
+                } else {
+                    errorAlert.textContent = `Error: ${data.error}`;
+                    errorAlert.classList.remove('d-none');
+                }
+
+            } catch(err) {
+                errorAlert.textContent = `A network error occurred: ${err.message}`;
+                errorAlert.classList.remove('d-none');
+            } finally {
+                startReevalBtn.disabled = false;
+                spinner.classList.add('d-none');
+            }
+        });
+
+        // Initialize chat when the page loads
+        document.addEventListener('DOMContentLoaded', initializeChat);
+
+        // Wire up chat input
+        sendChatBtn.addEventListener('click', handleSendChat);
+        chatInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSendChat();
+            }
+        });
+    </script>
+</body>
+</html>
