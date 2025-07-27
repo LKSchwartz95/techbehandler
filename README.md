@@ -48,6 +48,3 @@ The HTML templates backing the dashboard UI can be found under the
 [index.html](templates/index.html) lists all recorded analysis runs.
 
 ## Packaging
-
-
-
