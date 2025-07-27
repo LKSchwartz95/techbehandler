@@ -21,7 +21,7 @@ Python 3.11+ and the dependencies listed in `requirements.txt` are required. You
 pip install -r requirements.txt
 ```
 
-Some features require additional third party tools (e.g. Wireshark or Eclipse MAT) which can be downloaded through the Tool Manager dialog.
+Some features rely on third party utilities that can be installed through the Tool Manager dialog. Wireshark provides live packet capture, Eclipse MAT enables heap dump analysis and `nmap` powers the network scanner.
 
 On Windows you can launch the application with `run_dumpbehandler.bat`. The
 script will create a `venv` folder if needed, install dependencies and then run
@@ -42,6 +42,7 @@ python main.py dashboard
 ```
 
 Then browse to [http://localhost:5000/](http://localhost:5000/) to view the web dashboard.
+To protect the dashboard with a login prompt, set the environment variables `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD` before starting the app. A `DASHBOARD_SECRET_KEY` can also be supplied to override the default session secret.
 
 The application stores output under the `Resultat` directory.
 
@@ -62,3 +63,12 @@ python package.py
 
 The script bundles all essential files while excluding caches and large
 artifacts, outputting a timestamped zip file in the project root.
+
+
+## Tests
+
+Run the automated tests with [pytest](https://docs.pytest.org/):
+
+```bash
+pytest
+```
