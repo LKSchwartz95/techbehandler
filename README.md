@@ -23,6 +23,10 @@ pip install -r requirements.txt
 
 Some features require additional third party tools (e.g. Wireshark or Eclipse MAT) which can be downloaded through the Tool Manager dialog.
 
+On Windows you can launch the application with `run_dumpbehandler.bat`. The
+script will create a `venv` folder if needed, install dependencies and then run
+`main.py`.
+
 ## Usage
 
 Run the GUI directly:
