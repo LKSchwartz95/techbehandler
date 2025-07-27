@@ -2,6 +2,8 @@
 import os
 import time
 import asyncio
+import sys
+import ctypes
 import pyshark
 from pathlib import Path
 from pyshark.tshark.tshark import get_tshark_interfaces
@@ -15,6 +17,17 @@ from PySide6.QtWidgets import (
 # This allows the script to find the project root, even when imported by another script
 PROJECT_ROOT = Path(__file__).resolve().parent
 RESULTAT_DIR = PROJECT_ROOT / "Resultat"
+
+
+def is_admin() -> bool:
+    """Return True if the current process has administrative privileges."""
+    if os.name == "nt":
+        try:
+            return ctypes.windll.shell32.IsUserAnAdmin() != 0
+        except Exception:
+            return False
+    else:
+        return os.geteuid() == 0
 
 
 class CaptureWorker(QObject):
@@ -81,7 +94,7 @@ class CaptureWorker(QObject):
                 file_ready = False
 
                 while elapsed_time < timeout_seconds:
-                    if os.path.exists(self.output_file) and os.path.getsize(self.output_file) > 24: # pcap files have a 24-byte header
+                    if os.path.exists(self.output_file) and os.path.getsize(self.output_file) > 100:
                         file_ready = True
                         break
                     time.sleep(poll_interval)
@@ -91,7 +104,9 @@ class CaptureWorker(QObject):
                 if file_ready:
                     self.finished.emit(f"Capture complete. File saved to:\n{self.output_file}")
                 else:
-                    self.error.emit(f"Capture finished, but the output file is missing or empty after waiting {timeout_seconds}s:\n{self.output_file}")
+                    self.error.emit(
+                        f"Capture finished, but the output file is missing or appears empty after waiting {timeout_seconds}s:\n{self.output_file}"
+                    )
 
         except Exception as e:
             self.error.emit(f"An error occurred during capture:\n{e}")
@@ -157,6 +172,15 @@ class LiveCaptureDialog(QDialog):
         interface = self.interface_combo.currentText()
         if not interface:
             QMessageBox.warning(self, "No Interface", "Please select a network interface to capture from.")
+            return
+
+        if not is_admin():
+            QMessageBox.warning(
+                self,
+                "Insufficient Privileges",
+                "Live capture requires administrative privileges.\n"
+                "Please restart the application with elevated rights."
+            )
             return
 
         duration = self.duration_spinbox.value()
