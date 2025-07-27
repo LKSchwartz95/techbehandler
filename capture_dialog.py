@@ -2,6 +2,7 @@
 import os
 import time
 import asyncio
+import pyshark
 from pathlib import Path
 from pyshark.tshark.tshark import get_tshark_interfaces
 
