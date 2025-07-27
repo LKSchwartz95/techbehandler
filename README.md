@@ -1,7 +1,3 @@
-# TechBehandler
-
-TechBehandler is a GUI application for analyzing Java diagnostics and network captures using local LLM models with Ollama. The project provides utilities for generating reports, managing external tools and viewing results through a small dashboard.
-
 ## Features
 
 - Launch a PySide6 desktop application for analysis
