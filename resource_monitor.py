@@ -1,4 +1,3 @@
-
 import json
 import os
 import time
@@ -23,7 +22,7 @@ def collect_metrics(output_file: str | os.PathLike):
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     with open(output_file, "a", encoding="utf-8") as f:
         f.write(json.dumps(metrics) + "\n")
-   return metrics
+    return metrics
 
 
 def collect_once_in_resultat(run_name: str):
@@ -32,3 +31,4 @@ def collect_once_in_resultat(run_name: str):
     os.makedirs(run_dir, exist_ok=True)
     out_path = run_dir / "system_metrics.jsonl"
     return collect_metrics(str(out_path))
+
