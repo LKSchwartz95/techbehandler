@@ -34,8 +34,5 @@ The application stores output under the `Resultat` directory.
 
 ## Packaging
 
-`package.py` can be used to create a zip archive of the application while excluding large model files and temporary output.
 
-## License
 
-This project is licensed under the [MIT License](LICENSE).
