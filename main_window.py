@@ -8,6 +8,7 @@ import subprocess
 import glob
 from pathlib import Path
 import shutil
+import requests
 
 from PySide6.QtWidgets import (
     QWidget, QPushButton, QVBoxLayout, QHBoxLayout, QGridLayout,
@@ -93,6 +94,7 @@ class MainWindow(QWidget):
         self.dashboard_btn.clicked.connect(self.on_toggle_dashboard)
         self.open_browser_btn.clicked.connect(self.on_open_browser)
         self.open_resultat_btn.clicked.connect(self.on_open_resultat_folder)
+        self.export_pdf_btn.clicked.connect(self.on_export_pdf)
         self.guard_folder_select_btn.clicked.connect(self.on_select_guard_folder)
         self.guard_enable_checkbox.toggled.connect(self.on_toggle_guard_mode)
         self.guard_interval_spinbox.valueChanged.connect(self.on_guard_interval_changed)
@@ -182,13 +184,15 @@ class MainWindow(QWidget):
         dashboard_utils_layout = QHBoxLayout()
         self.dashboard_btn = QPushButton("Launch Dashboard")
         self.open_browser_btn = QPushButton("Open Dashboard in Browser")
-        self.open_resultat_btn = QPushButton("Open Results Folder") 
+        self.open_resultat_btn = QPushButton("Open Results Folder")
+        self.export_pdf_btn = QPushButton("Export PDF")
         self.port_label = QLabel("Port:")
         self.port_spin = QSpinBox()
         self.port_spin.setRange(1024, 65535)
         dashboard_utils_layout.addWidget(self.dashboard_btn)
         dashboard_utils_layout.addWidget(self.open_browser_btn)
-        dashboard_utils_layout.addWidget(self.open_resultat_btn) 
+        dashboard_utils_layout.addWidget(self.open_resultat_btn)
+        dashboard_utils_layout.addWidget(self.export_pdf_btn)
         dashboard_utils_layout.addStretch()
         dashboard_utils_layout.addWidget(self.port_label)
         dashboard_utils_layout.addWidget(self.port_spin)
@@ -572,7 +576,7 @@ class MainWindow(QWidget):
             self.append_console(f"Prompt '{name}' deleted.")
             self.save_settings_to_handler()
 
-    def on_open_resultat_folder(self): 
+    def on_open_resultat_folder(self):
         path = PROJECT_ROOT / "Resultat"
         path.mkdir(exist_ok=True)
         try:
@@ -584,6 +588,37 @@ class MainWindow(QWidget):
         except Exception as e:
             self.append_console(f"Error opening results folder: {e}")
             QMessageBox.warning(self, "Error", f"Could not open folder: {path}\n{e}")
+
+    def on_export_pdf(self):
+        run_dir = QFileDialog.getExistingDirectory(self, "Select Run Folder", str(RESULTAT_DIR))
+        if not run_dir:
+            return
+        run_name = os.path.basename(run_dir.rstrip(os.sep))
+        port = self.port_spin.value()
+        url = f"http://localhost:{port}/api/run/{run_name}/export_pdf"
+        self.append_console(f"Requesting PDF from {url}")
+        try:
+            response = requests.get(url, timeout=30)
+            response.raise_for_status()
+        except Exception as e:
+            self.append_console(f"PDF export request failed: {e}")
+            QMessageBox.warning(self, "Export Failed", f"Could not download PDF:\n{e}")
+            return
+
+        default_save = os.path.join(run_dir, f"{run_name}_report.pdf")
+        save_path, _ = QFileDialog.getSaveFileName(self, "Save PDF As", default_save, "PDF Files (*.pdf)")
+        if not save_path:
+            self.append_console("PDF export cancelled by user (no save path).")
+            return
+
+        try:
+            with open(save_path, "wb") as f:
+                f.write(response.content)
+            self.append_console(f"PDF saved to {save_path}")
+            QMessageBox.information(self, "Export Complete", f"PDF saved to:\n{save_path}")
+        except Exception as e:
+            self.append_console(f"Failed to save PDF: {e}")
+            QMessageBox.warning(self, "Save Error", f"Could not save PDF:\n{e}")
     
     def dragEnterEvent(self, event): 
         if event.mimeData().hasUrls():
@@ -1071,7 +1106,8 @@ class MainWindow(QWidget):
     def _on_dashboard_error_output(self): 
         if not self.dashboard_proc: return
         data = self.dashboard_proc.readAllStandardError().data().decode(sys.stderr.encoding or "utf-8", errors="replace")
-        for line in data.splitlines(): self.append_console(f"DASHBOARD_ERR: {line.rstrip('\r\n')}")
+        for line in data.splitlines():
+            self.append_console("DASHBOARD_ERR: " + line.rstrip("\r\n"))
     
     def _on_dashboard_finished(self, exit_code, exit_status): 
         status = "normally" if exit_status == QProcess.NormalExit else "crashed"; self.append_console(f"Dashboard finished ({status}) code {exit_code}"); self.dashboard_btn.setText("Launch Dashboard")
