@@ -29,6 +29,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 RESULTAT_DIR = PROJECT_ROOT / "Resultat"
 LEGACY_MAT_PATH = PROJECT_ROOT / "mat"
 TOOLS_MANIFEST_PATH = PROJECT_ROOT / "tools.json"
+TOOLS_DIR = PROJECT_ROOT / "tools"
 
 BUNDLED_OLLAMA_DIR = PROJECT_ROOT / "Ollama"
 BUNDLED_OLLAMA_EXE_PATH = BUNDLED_OLLAMA_DIR / ("ollama.exe" if sys.platform == "win32" else "ollama")
@@ -380,9 +381,24 @@ class MainWindow(QWidget):
 
     def get_tool_launcher_path(self, tool_id):
         if tool_id == "wireshark":
+            binary = "tshark.exe" if sys.platform == "win32" else "tshark"
+            current_platform = (
+                "win64" if sys.platform == "win32" else
+                "macos-aarch64" if sys.platform == "darwin" else
+                "linux-x86_64"
+            )
+
+            # Check any installed version in the tools directory
+            for path in TOOLS_DIR.glob(f"wireshark-*-{current_platform}"):
+                launcher_path = path / binary
+                if launcher_path.is_file():
+                    self.append_console(f"Using Wireshark installation found at: {launcher_path}")
+                    return str(launcher_path)
+
+            # Fall back to the manifest-defined location
             if TOOLS_MANIFEST_PATH.exists():
-                with open(TOOLS_MANIFEST_PATH, "r") as f: manifest = json.load(f)
-                current_platform = "win64" if sys.platform == "win32" else ""
+                with open(TOOLS_MANIFEST_PATH, "r") as f:
+                    manifest = json.load(f)
                 for tool in manifest.get("tools", []):
                     if tool.get("id") == "wireshark" and tool.get("platform") == current_platform:
                         install_path = PROJECT_ROOT / tool.get("install_path")
@@ -390,6 +406,8 @@ class MainWindow(QWidget):
                         if launcher_path.is_file():
                             self.append_console(f"Using managed Wireshark (tshark) found at: {launcher_path}")
                             return str(launcher_path)
+
+            # Last resort: system PATH
             tshark_path = shutil.which("tshark")
             if tshark_path:
                 self.append_console(f"Using system tshark found at: {tshark_path}")
