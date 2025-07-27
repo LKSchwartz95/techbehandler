@@ -26,11 +26,29 @@
 </head>
 <body>
     <div class="container my-4">
-        <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
+        <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom flex-wrap gap-2">
             <h1 class="h2"><i class="bi bi-speedometer2"></i> DumpBehandler Dashboard</h1>
             <div>
                 <button id="compareBtn" class="btn btn-primary" disabled><i class="bi bi-subtract"></i> Compare Selected</button>
                 <button id="deleteSelectedBtn" class="btn btn-danger" disabled><i class="bi bi-trash"></i> Delete Selected</button>
+                <button id="markPendingBtn" class="btn btn-outline-secondary" disabled>Mark Pending</button>
+                <button id="markResolvedBtn" class="btn btn-outline-success" disabled>Mark Resolved</button>
+            </div>
+        </div>
+
+        <div class="row mb-3">
+            <div class="col-md-4 mb-2">
+                <input id="searchInput" type="search" class="form-control" placeholder="Search by name...">
+            </div>
+            <div class="col-md-3 mb-2">
+                <input id="tagFilter" type="text" class="form-control" placeholder="Filter by tag">
+            </div>
+            <div class="col-md-3 mb-2">
+                <select id="statusFilter" class="form-select">
+                    <option value="all">All Statuses</option>
+                    <option value="pending">Pending</option>
+                    <option value="resolved">Resolved</option>
+                </select>
             </div>
         </div>
         
@@ -44,19 +62,35 @@
             const runListContainer = document.getElementById('runList');
             const compareButton = document.getElementById('compareBtn');
             const deleteSelectedButton = document.getElementById('deleteSelectedBtn');
+            const markPendingBtn = document.getElementById('markPendingBtn');
+            const markResolvedBtn = document.getElementById('markResolvedBtn');
+            const searchInput = document.getElementById('searchInput');
+            const tagFilter = document.getElementById('tagFilter');
+            const statusFilter = document.getElementById('statusFilter');
+
+            let allRuns = [];
 
             function fetchAndDisplayRuns() {
                 fetch('/api/runs')
                     .then(response => response.json())
                     .then(runsData => {
-                        runListContainer.innerHTML = ''; 
-                        if (!runsData || runsData.length === 0) {
-                            runListContainer.innerHTML = '<div class="list-group-item text-center">No analysis runs found in the \'Resultat\' directory.</div>';
-                            return;
-                        }
+                        allRuns = runsData || [];
+                        applyFilters();
+                    })
+                    .catch(error => {
+                        runListContainer.innerHTML = '<div class="list-group-item text-center text-danger">Error loading analysis runs. Please check the console.</div>';
+                        console.error('Error fetching runs:', error);
+                    });
+            }
 
-                        // runsData is already sorted by modification time by the server
-                        runsData.forEach(runObj => {
+            function displayRuns(runsData) {
+                runListContainer.innerHTML = '';
+                if (!runsData || runsData.length === 0) {
+                    runListContainer.innerHTML = '<div class="list-group-item text-center">No analysis runs found in the \'Resultat\' directory.</div>';
+                    return;
+                }
+
+                runsData.forEach(runObj => {
                             const listItem = document.createElement('div');
                             listItem.className = 'list-group-item';
 
@@ -87,20 +121,30 @@
                                     </div>
                                 </div>
                             `;
-                            runListContainer.appendChild(listItem);
-                        });
-                        updateButtonStates();
-                    })
-                    .catch(error => {
-                        runListContainer.innerHTML = '<div class="list-group-item text-center text-danger">Error loading analysis runs. Please check the console.</div>';
-                        console.error('Error fetching runs:', error);
-                    });
+                    runListContainer.appendChild(listItem);
+                });
+                updateButtonStates();
+            }
+
+            function applyFilters() {
+                const text = searchInput.value.toLowerCase();
+                const tag = tagFilter.value.toLowerCase();
+                const status = statusFilter.value;
+                const filtered = allRuns.filter(r => {
+                    const matchText = r.name.toLowerCase().includes(text);
+                    const matchStatus = status === 'all' || r.user_status === status;
+                    const matchTag = !tag || (r.tags && r.tags.some(t => t.toLowerCase().includes(tag)));
+                    return matchText && matchStatus && matchTag;
+                });
+                displayRuns(filtered);
             }
 
             function updateButtonStates() {
                 const selectedCheckboxes = document.querySelectorAll('.run-checkbox:checked');
                 compareButton.disabled = selectedCheckboxes.length < 2;
                 deleteSelectedButton.disabled = selectedCheckboxes.length === 0;
+                markPendingBtn.disabled = selectedCheckboxes.length === 0;
+                markResolvedBtn.disabled = selectedCheckboxes.length === 0;
             }
             
             runListContainer.addEventListener('click', function(event) {
@@ -108,6 +152,10 @@
                     updateButtonStates();
                 }
             });
+
+            searchInput.addEventListener('input', applyFilters);
+            tagFilter.addEventListener('input', applyFilters);
+            statusFilter.addEventListener('change', applyFilters);
 
             compareButton.addEventListener('click', function() {
                 const selectedCheckboxes = document.querySelectorAll('.run-checkbox:checked');
@@ -134,7 +182,23 @@
                 }
             });
 
+            function bulkUpdateStatus(status) {
+                const checked = document.querySelectorAll('.run-checkbox:checked');
+                const runNames = Array.from(checked).map(cb => cb.value);
+                Promise.all(runNames.map(runName =>
+                    fetch(`/api/run/${runName}/set_status`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status })
+                    })
+                )).then(() => fetchAndDisplayRuns());
+            }
+
+            markPendingBtn.addEventListener('click', () => bulkUpdateStatus('pending'));
+            markResolvedBtn.addEventListener('click', () => bulkUpdateStatus('resolved'));
+
             fetchAndDisplayRuns();
+            setInterval(fetchAndDisplayRuns, 10000);
         });
     </script>
 </body>
