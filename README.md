@@ -39,3 +39,15 @@ The application stores output under the `Resultat` directory.
 ## Packaging
 
 `package.py` can be used to create a zip archive of the application while excluding large model files and temporary output.
+
+## Testing
+
+Run the unit tests with:
+
+```bash
+pytest
+```
+
+Tests run automatically on GitHub Actions:
+
+[![Tests](https://github.com/<owner>/techbehandler/actions/workflows/python-app.yml/badge.svg)](https://github.com/<owner>/techbehandler/actions/workflows/python-app.yml)
