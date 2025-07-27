@@ -1,6 +1,6 @@
 {
     "default_ollama_model": "gemma3:1b",
-    "ollama_dashboard_port": 5000,
+    "ollama_dashboard_port": 5001,
     "mat_memory_mb": 4096,
     "guard_mode_folder": "",
     "guard_mode_enabled": false,
@@ -24,7 +24,7 @@
         }
     ],
     "default_prompt_name": "HPROF Comprehensive Analysis",
-    "last_hprof_dir": "C:/Users/YourUser/Documents",
+    "last_hprof_dir": "C:/DumpBehandler/hprof",
     "default_mat_report_type_id": "leak_suspects",
     "mat_report_options": [
         {
