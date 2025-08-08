@@ -160,13 +160,29 @@ def get_runs_api():
     return jsonify(runs_with_status)
 
 def _load_run_data_common(run_dir_path, run_name_for_log):
-    data = { "name": run_name_for_log, "model_used": OLLAMA_MODEL_DISPLAY_FALLBACK, "timestamp": "N/A",
-        "analysis_type": "unknown", "hprof_source": "N/A", "mat_memory_setting": "N/A", "mat_report_type": "N/A",
-        "llm_analysis_html": "<p><em>Analysis N/A</em></p>", "metadata_error": None, "md_error": None, 
-        "raw_md_snippet_on_load": "N/A", "md_filename_processed": None, "user_status": USER_STATUS_PENDING,
-        "raw_llm_analysis_text": None, "raw_diagnostic_text": None,
-        "llm_generated_tags": [], "llm_params_json": "{}",
-        "user_notes": ""
+    data = {
+        "name": run_name_for_log,
+        "model_used": OLLAMA_MODEL_DISPLAY_FALLBACK,
+        "timestamp": "N/A",
+        "analysis_type": "unknown",
+        "hprof_source": "N/A",
+        "mat_memory_setting": "N/A",
+        "mat_report_type": "N/A",
+        "llm_analysis_html": "<p><em>Analysis N/A</em></p>",
+        "metadata_error": None,
+        "md_error": None,
+        "raw_md_snippet_on_load": "N/A",
+        "md_filename_processed": None,
+        "user_status": USER_STATUS_PENDING,
+        "raw_llm_analysis_text": None,
+        "raw_diagnostic_text": None,
+        "raw_oom_trace_text": None,
+        "llm_generated_tags": [],
+        "llm_params_json": "{}",
+        "user_notes": "",
+        "mat_report_entry_file": None,
+        "mat_problem_suspect_html": "<p><em>MAT report not available or not applicable.</em></p>",
+        "mat_overview_pie_chart_url": None,
     }
     metadata_path = os.path.join(run_dir_path, "run_metadata.json")
     if os.path.isfile(metadata_path):
@@ -192,6 +208,48 @@ def _load_run_data_common(run_dir_path, run_name_for_log):
     temp_md_fn = None
     try: 
         files_in_run_dir = os.listdir(run_dir_path)
+
+        # Attempt to locate MAT report entry (index.html)
+        for root_dir, _, files in os.walk(run_dir_path):
+            if 'index.html' in files:
+                rel_path = os.path.relpath(os.path.join(root_dir, 'index.html'), run_dir_path).replace('\\', '/')
+                data['mat_report_entry_file'] = rel_path
+                break
+
+        if data['mat_report_entry_file']:
+            try:
+                mat_full_path = os.path.join(run_dir_path, data['mat_report_entry_file'])
+                with open(mat_full_path, 'r', encoding='utf-8', errors='ignore') as f_mat:
+                    soup = BeautifulSoup(f_mat.read(), 'lxml')
+
+                report_type = data.get('mat_report_type', '').lower()
+                if 'suspects' in report_type:
+                    h_suspect = soup.find(lambda t: t.name in ('h2', 'h3') and 'Problem Suspect 1' in t.get_text())
+                    if h_suspect:
+                        detail_div = h_suspect.find_next_sibling('div', class_='details') or h_suspect.find_next_sibling()
+                        if detail_div:
+                            for tag in detail_div.find_all(('a', 'img')):
+                                attr = 'href' if tag.name == 'a' else 'src'
+                                if tag.has_attr(attr) and not tag[attr].startswith(('http', '//', 'data:')):
+                                    asset_path = Path(os.path.dirname(data['mat_report_entry_file'])) / tag[attr]
+                                    clean_fn = os.path.normpath(asset_path).replace('\\', '/')
+                                    tag[attr] = f"/run/{run_name_for_log}/{clean_fn}" if not clean_fn.startswith('../') else '#'
+                            data['mat_problem_suspect_html'] = detail_div.prettify()
+                else:
+                    data['mat_problem_suspect_html'] = (
+                        f"<p><em>Displaying '{report_type}' MAT report. "
+                        f"<a href='/run/{run_name_for_log}/{data['mat_report_entry_file']}' target='_blank'>Open full report.</a></em></p>"
+                    )
+
+                pie_img = soup.find('img', src=lambda s: s and 'chart' in s.lower() and s.lower().endswith('.png'))
+                if pie_img and pie_img.has_attr('src'):
+                    pie_path = Path(os.path.dirname(data['mat_report_entry_file'])) / pie_img['src']
+                    pie_fn = os.path.normpath(pie_path).replace('\\', '/')
+                    if os.path.isfile(os.path.join(run_dir_path, pie_fn)):
+                        data['mat_overview_pie_chart_url'] = f"/run/{run_name_for_log}/{pie_fn}"
+            except Exception as e_mat:
+                log_dashboard_error(f"Err parsing MAT HTML for {run_name_for_log}: {e_mat}")
+
         # Prioritize .md files that contain 'analysis'
         md_files = [f for f in files_in_run_dir if f.lower().endswith(".md")]
         analysis_md_files = [f for f in md_files if 'analysis' in f.lower()]
@@ -220,19 +278,52 @@ def _load_run_data_common(run_dir_path, run_name_for_log):
                 diag_data_match = re.search(r"### (?:Full Thread Dump|Thread Dump Details from HPROF|tshark Analysis Output):\n```text\n(.*?)\n```", md_content, re.DOTALL)
                 if diag_data_match:
                     data["raw_diagnostic_text"] = diag_data_match.group(1).strip()
+
+                oom_match = re.search(r"###\s*Detected OutOfMemoryError Trace.*?(?:```.*?\n(.*?)\n```|\n(.*?)(?=\n###|$))", md_content, re.DOTALL | re.IGNORECASE)
+                if oom_match:
+                    data["raw_oom_trace_text"] = (oom_match.group(1) or oom_match.group(2)).strip()
+                    if not data["raw_diagnostic_text"]:
+                        data["raw_diagnostic_text"] = data["raw_oom_trace_text"]
             else: data["llm_analysis_html"] = "<p><em>MD file path invalid.</em></p>"
         else: data["llm_analysis_html"] = "<p><em>No analysis MD file found.</em></p>"
     except Exception as e: log_dashboard_error(f"Err processing MD for {run_name_for_log}: {e}"); data["md_error"] = f"Err MD: {e}"; data["llm_analysis_html"] = f"<p><em>Err loading MD: {e}</em></p>"
     
-    # Fallback to find raw data if not in markdown
+    # Fallback to find OOM trace if not in markdown
+    if not data["raw_oom_trace_text"]:
+        try:
+            trace_fn = next(
+                (
+                    f
+                    for f in os.listdir(run_dir_path)
+                    if f.lower().endswith('.threads')
+                    or f.lower() == 'trace_used.txt'
+                    or f.lower().endswith('_llm_failed.txt')
+                ),
+                None,
+            )
+            if trace_fn:
+                with open(os.path.join(run_dir_path, trace_fn), 'r', encoding='utf-8', errors='ignore') as f_trace:
+                    data['raw_oom_trace_text'] = f_trace.read().strip()
+        except Exception as e_trace:
+            log_dashboard_error(f"Fallback: Error reading OOM trace for {run_name_for_log}: {e_trace}")
+
+    if data["raw_oom_trace_text"] and not data["raw_diagnostic_text"]:
+        data["raw_diagnostic_text"] = data["raw_oom_trace_text"]
+
+    # Fallback to find general diagnostic data if still missing
     if not data["raw_diagnostic_text"]:
         try:
-            # Check for explicitly generated summary files
-            trace_fn = next((f for f in os.listdir(run_dir_path) if f.lower().endswith(("_tshark_summary.txt", ".threads"))), None) \
-                       or next((f for f in os.listdir(run_dir_path) if f.lower().endswith(".txt") and not f.lower().endswith("_tshark_summary.txt")), None)
-
+            trace_fn = next(
+                (
+                    f
+                    for f in os.listdir(run_dir_path)
+                    if f.lower().endswith('_tshark_summary.txt')
+                    or f.lower().endswith('.txt')
+                ),
+                None,
+            )
             if trace_fn:
-                with open(os.path.join(run_dir_path, trace_fn), "r", encoding="utf-8", errors="ignore") as f_trace:
+                with open(os.path.join(run_dir_path, trace_fn), 'r', encoding='utf-8', errors='ignore') as f_trace:
                     data["raw_diagnostic_text"] = f_trace.read().strip()
         except Exception as e_trace:
             log_dashboard_error(f"Fallback: Error reading diagnostic file for {run_name_for_log}: {e_trace}")
@@ -258,6 +349,9 @@ def _load_run_data_common(run_dir_path, run_name_for_log):
         except Exception as e_pcap:
             log_dashboard_error(f"Error extracting pcap preview for {run_name_for_log}: {e_pcap}")
 
+    if not data.get("raw_thread_dump_text"):
+        data["raw_thread_dump_text"] = data.get("raw_oom_trace_text") or data.get("raw_diagnostic_text")
+
     return data
 
 
@@ -268,15 +362,10 @@ def view_run(run):
     run_dir_path = os.path.join(RESULTAT_DIR_DASHBOARD, run)
     if not os.path.isdir(run_dir_path): log_dashboard_error(f"Run dir FNF: {run_dir_path}"); abort(404)
     run_info = _load_run_data_common(run_dir_path, run)
-    
-    mat_suspect_html, mat_pie_src = "<p><em>MAT report not available or not applicable.</em></p>", None
-    mat_report_entry_file = None
 
-    # Find MAT report entry point, searching subdirectories
-    for root, _, files in os.walk(run_dir_path):
-        if 'index.html' in files:
-            mat_report_entry_file = os.path.relpath(os.path.join(root, 'index.html'), run_dir_path).replace('\\', '/')
-            break
+    mat_report_entry_file = run_info.get("mat_report_entry_file")
+    mat_suspect_html = run_info.get("mat_problem_suspect_html")
+    mat_pie_src = run_info.get("mat_overview_pie_chart_url")
 
     mat_idx_link_txt = "MAT Report (Not Found)"
     mat_toc_link_txt = "MAT TOC (Not Found)"
@@ -284,11 +373,10 @@ def view_run(run):
     toc_relpaths = set()
     mat_extra_index_entries = []
 
-    
     if mat_report_entry_file:
         mat_report_full_path = os.path.join(run_dir_path, mat_report_entry_file)
         mat_idx_link_txt = f"MAT Report ({os.path.basename(mat_report_entry_file)})"
-        
+
         mat_toc_path = os.path.join(os.path.dirname(mat_report_full_path), "toc.html")
         if os.path.isfile(mat_toc_path):
             mat_toc_link_txt = "MAT Table of Contents"
@@ -330,44 +418,10 @@ def view_run(run):
         except Exception as e:
             log_dashboard_error(f"Err listing MAT index files for {run}: {e}")
 
-        try:
-            with open(mat_report_full_path, "r", encoding="utf-8", errors="ignore") as f_mat_idx:
-                soup = BeautifulSoup(f_mat_idx.read(), "lxml")
-
-            
-            report_type = run_info.get("mat_report_type", "").lower()
-            if "suspects" in report_type:
-                h_suspect = soup.find(lambda t: t.name in ("h2", "h3") and "Problem Suspect 1" in t.get_text())
-                if h_suspect:
-                    detail_div = h_suspect.find_next_sibling("div", class_="details") or h_suspect.find_next_sibling()
-                    if detail_div:
-                        for tag in detail_div.find_all(("a", "img")):
-                            attr = "href" if tag.name == "a" else "src"
-                            if tag.has_attr(attr) and not tag[attr].startswith(("http", "//", "data:")):
-                                # Construct relative path from the main run dir to the asset
-                                asset_path_from_report = Path(os.path.dirname(mat_report_entry_file)) / tag[attr]
-                                clean_fn = os.path.normpath(asset_path_from_report).replace("\\", "/")
-                                tag[attr] = url_for("get_file_from_run", run=run, filename=clean_fn) if not clean_fn.startswith("../") else "#"
-                        mat_suspect_html = detail_div.prettify()
-                else:
-                    mat_suspect_html = "<p><em>Leak Suspects report parsed, but 'Problem Suspect 1' section not found.</em></p>"
-            else:
-                 mat_suspect_html = f"<p><em>Displaying '{report_type}' MAT report. <a href='{url_for('get_file_from_run', run=run, filename=mat_report_entry_file)}' target='_blank'>Open full report.</a></em></p>"
-
-            pie_img = soup.find("img", src=lambda s: s and "chart" in s.lower() and s.lower().endswith(".png"))
-            if pie_img and pie_img.has_attr("src"):
-                pie_path_from_report = Path(os.path.dirname(mat_report_entry_file)) / pie_img['src']
-                pie_fn = os.path.normpath(pie_path_from_report).replace("\\", "/")
-                if os.path.isfile(os.path.join(run_dir_path, pie_fn)):
-                    mat_pie_src = url_for("get_file_from_run", run=run, filename=pie_fn)
-        except Exception as e:
-            log_dashboard_error(f"Err parsing MAT HTML for {run}: {e}"); mat_suspect_html = f"<p><em>Error parsing MAT HTML: {e}</em></p>"
-            
     other_files = []
     try:
         md_name_only = os.path.basename(run_info["md_filename_processed"]) if run_info.get("md_filename_processed") else ""
 
-        # General exclusion list
         excluded_files = {"run_metadata.json", md_name_only}
         if mat_report_entry_file:
             excluded_files.add(mat_report_entry_file)
@@ -406,7 +460,7 @@ def view_run(run):
         mat_memory_setting=run_info.get("mat_memory_setting"),
         model_used=run_info.get("model_used"),
         llm_analysis_html=run_info.get("llm_analysis_html"),
-        thread_dump_details=run_info.get("raw_diagnostic_text", "N/A"),
+        oom_trace_details=run_info.get("raw_oom_trace_text", "N/A"),
         pcap_sample=run_info.get("pcap_sample"),
         mat_problem_suspect_html=mat_suspect_html,
         mat_overview_pie_chart_url=mat_pie_src,
@@ -425,7 +479,7 @@ def view_run(run):
         user_notes=run_info.get("user_notes", ""),
         default_llm_params=get_llm_parameters_from_config(),
         initial_llm_analysis_text_for_chat=run_info.get("raw_llm_analysis_text", None),
-        initial_diagnostic_text_for_chat=run_info.get("raw_diagnostic_text", None),
+        initial_diagnostic_text_for_chat=run_info.get("raw_oom_trace_text", run_info.get("raw_diagnostic_text", None)),
         saved_prompts=prompts_for_template,
         available_models=ollama_models_available
     )
@@ -444,7 +498,7 @@ def export_run_pdf(run):
         run_time=run_info.get("timestamp"),
         model_used=run_info.get("model_used"),
         llm_analysis_html=run_info.get("llm_analysis_html"),
-        thread_dump_details=run_info.get("raw_diagnostic_text", "N/A"),
+        thread_dump_details=run_info.get("raw_oom_trace_text", run_info.get("raw_diagnostic_text", "N/A")),
         tags=run_info.get("llm_generated_tags", [])
     )
     
