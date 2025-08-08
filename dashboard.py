@@ -163,7 +163,9 @@ def index():
 
 @app.route("/api/runs")
 def get_runs_api():
+
     ensure_resultat_dir(); runs_with_status = []
+
     try:
         # Sort directories by modification time, newest first
         dirs = [d for d in os.listdir(RESULTAT_DIR_DASHBOARD) if os.path.isdir(os.path.join(RESULTAT_DIR_DASHBOARD, d))]
@@ -181,6 +183,7 @@ def get_runs_api():
             runs_with_status.append({"name": run_name, "user_status": status, "tags": tags})
     except Exception as e: log_dashboard_error(f"API Err read Resultat: {e}"); return jsonify({"error": str(e)}), 500
     return jsonify(runs_with_status)
+
 
 
 def _capture_worker(interface, duration):
@@ -271,6 +274,7 @@ def api_capture():
 def capture_page():
     """Serve simple page to control live packet captures."""
     return render_template("capture.html")
+
 
 def _load_run_data_common(run_dir_path, run_name_for_log):
     data = {

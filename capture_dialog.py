@@ -1,11 +1,12 @@
 # Filename: capture_dialog.py
-import os
-import time
 import asyncio
-import sys
 import ctypes
-import pyshark
+import os
+import sys
+import time
 from pathlib import Path
+
+import pyshark
 from pyshark.tshark.tshark import get_tshark_interfaces
 
 from PySide6.QtCore import QObject, Signal, QThread

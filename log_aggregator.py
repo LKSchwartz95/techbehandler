@@ -1,4 +1,4 @@
-import os
+import os  # Needed for filesystem operations and environment queries
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent
