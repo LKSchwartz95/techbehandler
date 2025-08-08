@@ -92,12 +92,13 @@ class MainWindow(QWidget):
         
         self.guard_mode_timer = QTimer(self)
         self.processed_in_guard_mode = set()
-        self.guard_mode_file_mod_times = {} 
-        
+        self.guard_mode_file_mod_times = {}
+
         self.wireshark_task_checkboxes = {}
-        
-        self._init_ui() 
-        self.load_settings_from_handler() 
+        self.is_lite_mode = False
+
+        self._init_ui()
+        self.load_settings_from_handler()
         self._check_bundled_resources()
 
     def _init_ui(self):
@@ -112,12 +113,14 @@ class MainWindow(QWidget):
         console_tab = self._create_console_tab()
         info_tab = self._create_info_tab()
         wip_tab = self._create_wip_tab()
+        lite_tab = self._create_lite_mode_tab()
 
         self.main_tabs.addTab(analysis_control_tab, "Analysis Control")
         self.main_tabs.addTab(dashboard_tab, "Dashboard & Guard Mode")
         self.main_tabs.addTab(console_tab, "Console Output")
         self.main_tabs.addTab(info_tab, "Guides & File Types")
         self.main_tabs.addTab(wip_tab, "Security Checklist (WIP)")
+        self.main_tabs.addTab(lite_tab, "LITE Mode")
 
         # Connect signals to slots
         self.run_btn.clicked.connect(self.on_select_and_run_analysis)
@@ -463,7 +466,58 @@ class MainWindow(QWidget):
         main_layout.addWidget(group_box)
         main_layout.addStretch()
         return main_layout
-    
+
+    def _create_lite_mode_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        self.lite_status_label = QLabel()
+        layout.addWidget(self.lite_status_label)
+        self.lite_limit_mat_checkbox = QCheckBox("Limit MAT memory to 1024 MB")
+        self.lite_reduce_llm_checkbox = QCheckBox("Reduce LLM context and tokens")
+        self.lite_basic_wireshark_checkbox = QCheckBox("Only run basic Wireshark task")
+        layout.addWidget(self.lite_limit_mat_checkbox)
+        layout.addWidget(self.lite_reduce_llm_checkbox)
+        layout.addWidget(self.lite_basic_wireshark_checkbox)
+        self.activate_lite_btn = QPushButton("Apply Lite Mode")
+        self.activate_lite_btn.clicked.connect(self.on_activate_lite_mode)
+        layout.addWidget(self.activate_lite_btn)
+        layout.addStretch()
+        return tab
+
+    def update_lite_mode_indicator(self):
+        if self.is_lite_mode:
+            self.lite_status_label.setText("Lite Mode: ON")
+            self.lite_status_label.setStyleSheet("color: green; font-weight: bold;")
+            self.setWindowTitle("DumpBehandler Control Panel [LITE MODE]")
+            self.activate_lite_btn.setText("Exit Lite Mode")
+        else:
+            self.lite_status_label.setText("Lite Mode: OFF")
+            self.lite_status_label.setStyleSheet("color: red; font-weight: bold;")
+            self.setWindowTitle("DumpBehandler Control Panel")
+            self.activate_lite_btn.setText("Apply Lite Mode")
+
+    def on_activate_lite_mode(self):
+        if self.is_lite_mode:
+            self.is_lite_mode = False
+            self.update_lite_mode_indicator()
+            self.append_console("Lite Mode deactivated.")
+            self.save_settings_to_handler()
+            return
+
+        if self.lite_limit_mat_checkbox.isChecked():
+            self.mat_memory_spinbox.setValue(1024)
+        if self.lite_reduce_llm_checkbox.isChecked():
+            self.llm_num_ctx_spin.setValue(min(self.llm_num_ctx_spin.value(), 2048))
+            self.llm_num_predict_spin.setValue(min(self.llm_num_predict_spin.value(), 256))
+        if self.lite_basic_wireshark_checkbox.isChecked():
+            for task_id, cb in self.wireshark_task_checkboxes.items():
+                cb.setChecked(task_id == "tcp_conv")
+
+        self.is_lite_mode = True
+        self.update_lite_mode_indicator()
+        self.append_console("Lite Mode applied.")
+        self.save_settings_to_handler()
+
     def on_wireshark_task_toggled(self):
         self.settings["wireshark_tasks"] = {
             task_id: cb.isChecked() for task_id, cb in self.wireshark_task_checkboxes.items()
@@ -674,6 +728,13 @@ class MainWindow(QWidget):
         for task_id, cb in self.wireshark_task_checkboxes.items():
             cb.setChecked(saved_tasks.get(task_id, False))
 
+        lite_opts = self.settings.get("lite_mode", config_handler.DEFAULT_SETTINGS["lite_mode"])
+        self.lite_limit_mat_checkbox.setChecked(lite_opts.get("limit_mat_memory", False))
+        self.lite_reduce_llm_checkbox.setChecked(lite_opts.get("reduce_llm_context", False))
+        self.lite_basic_wireshark_checkbox.setChecked(lite_opts.get("basic_wireshark_tasks", False))
+        self.is_lite_mode = self.settings.get("lite_mode_enabled", False)
+        self.update_lite_mode_indicator()
+
     def save_settings_to_handler(self):
         """
         Gathers current UI settings and uses the config_handler to save them.
@@ -708,7 +769,13 @@ class MainWindow(QWidget):
         self.settings["guard_mode_enabled"] = self.guard_enable_checkbox.isChecked()
         self.settings["guard_mode_interval_minutes"] = self.guard_interval_spinbox.value()
         self.settings["wireshark_tasks"] = {task_id: cb.isChecked() for task_id, cb in self.wireshark_task_checkboxes.items()}
-        
+        self.settings["lite_mode"] = {
+            "limit_mat_memory": self.lite_limit_mat_checkbox.isChecked(),
+            "reduce_llm_context": self.lite_reduce_llm_checkbox.isChecked(),
+            "basic_wireshark_tasks": self.lite_basic_wireshark_checkbox.isChecked()
+        }
+        self.settings["lite_mode_enabled"] = self.is_lite_mode
+
         if not config_handler.save_settings(self.settings):
             QMessageBox.warning(self, "Save Settings Error", "Could not save settings to config.json.")
 
