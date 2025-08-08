@@ -3,9 +3,17 @@ import os
 import re
 import subprocess
 from pathlib import Path
+import sys
+from typing import List, Optional
+import config_handler
+
 
 PROJECT_ROOT = Path(__file__).resolve().parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.append(str(PROJECT_ROOT))
+from utils import sanitize_run_name
 RESULTAT_DIR = PROJECT_ROOT / "Resultat"
+
 
 
 def parse_nmap_output(output_file: Path) -> dict:
@@ -58,11 +66,22 @@ def write_nmap_json(output_file: Path) -> Path:
 
 def run_nmap_scan(target: str, run_dir: Path) -> str:
     """Run an nmap scan if nmap is available and create a JSON report."""
+
     output_file = run_dir / f"nmap_{target.replace('/', '_')}.txt"
-    cmd = ["nmap", "-A", target]
+    cmd = ["nmap", "-A"]
+    if extra_options:
+        cmd.extend(extra_options)
+    cmd.append(target)
     try:
         with open(output_file, "w", encoding="utf-8") as f:
-            subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT, check=False)
+            try:
+                result = subprocess.run(
+                    cmd, stdout=f, stderr=subprocess.STDOUT, check=False, timeout=timeout
+                )
+                if result.returncode != 0:
+                    f.write(f"\nCommand exited with return code {result.returncode}\n")
+            except subprocess.TimeoutExpired:
+                f.write("nmap scan timed out\n")
     except FileNotFoundError:
         with open(output_file, "w", encoding="utf-8") as f:
             f.write("nmap not installed or not found in PATH\n")
@@ -72,15 +91,30 @@ def run_nmap_scan(target: str, run_dir: Path) -> str:
 
 
 def scan_target(target: str, run_name: str):
+    run_name = sanitize_run_name(run_name)
     run_dir = RESULTAT_DIR / run_name
     os.makedirs(run_dir, exist_ok=True)
-    return run_nmap_scan(target, run_dir)
+
+    settings = config_handler.load_settings()
+    extra_opts = settings.get("nmap_options", [])
+    return run_nmap_scan(target, run_dir, extra_opts)
 
 
-def load_nmap_json(json_file: Path) -> dict:
-    """Helper to load nmap JSON results for display in the dashboard."""
-    try:
-        with open(json_file, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return {}
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run an Nmap scan and save the output.")
+    parser.add_argument("target", help="Target to scan")
+    parser.add_argument("--run-name", default="run", help="Output directory name")
+    parser.add_argument(
+        "--options",
+        nargs="*",
+        help="Extra options for nmap (overrides config file)",
+    )
+    args = parser.parse_args()
+
+    opts = args.options if args.options is not None else config_handler.load_settings().get("nmap_options", [])
+    run_dir = RESULTAT_DIR / args.run_name
+    os.makedirs(run_dir, exist_ok=True)
+    output_path = run_nmap_scan(args.target, run_dir, opts)
+    print(output_path)
