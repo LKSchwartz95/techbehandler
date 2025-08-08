@@ -464,6 +464,26 @@ class MainWindow(QWidget):
                     if nested:
                         self.append_console(f"Using managed Ghidra found at: {nested}")
                         return str(nested)
+
+            # Fallback: check for a global installation in the system PATH
+            global_launcher = shutil.which("analyzeHeadless")
+            if not global_launcher and sys.platform == "win32":
+                global_launcher = shutil.which("analyzeHeadless.bat")
+            if global_launcher:
+                self.append_console(f"Using system Ghidra found at: {global_launcher}")
+                return global_launcher
+
+            # As a last resort, allow the user to manually select the script
+            file_path, _ = QFileDialog.getOpenFileName(
+                self,
+                "Locate Ghidra analyzeHeadless",
+                str(Path.home()),
+                "analyzeHeadless*"
+            )
+            if file_path:
+                self.append_console(f"Using user-selected Ghidra found at: {file_path}")
+                return file_path
+
         return None
 
     def on_llm_params_group_toggled(self, checked):
