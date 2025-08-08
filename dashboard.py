@@ -419,14 +419,11 @@ def view_run(run):
             log_dashboard_error(f"Err listing MAT index files for {run}: {e}")
 
     other_files = []
+    viewable_files = []
     try:
         md_name_only = os.path.basename(run_info["md_filename_processed"]) if run_info.get("md_filename_processed") else ""
 
         excluded_files = {"run_metadata.json", md_name_only}
-        if mat_report_entry_file:
-            excluded_files.add(mat_report_entry_file)
-            toc_candidate = os.path.join(os.path.dirname(mat_report_entry_file), "toc.html").replace("\\", "/")
-            excluded_files.add(toc_candidate)
 
         for root_dir, _, files in os.walk(run_dir_path):
             for f in files:
@@ -436,6 +433,11 @@ def view_run(run):
                 other_files.append(rel_path)
 
         other_files = sorted(other_files)
+
+        viewable_exts = {".txt", ".log", ".html", ".htm", ".json", ".md", ".csv"}
+        for f in other_files:
+            if os.path.splitext(f.lower())[1] in viewable_exts:
+                viewable_files.append(f)
 
     except Exception as e:
         log_dashboard_error(f"Err listing files for {run}: {e}")
@@ -471,6 +473,7 @@ def view_run(run):
 
         mat_index_files=mat_extra_index_entries,
         other_run_files=other_files,
+        viewable_run_files=viewable_files,
         mat_report_type_used=run_info.get("mat_report_type"),
         user_status=run_info.get("user_status"),
 
