@@ -43,7 +43,7 @@ def collect_metrics(output_file: str | os.PathLike):
     else:
         metrics.update(
             {
-                "cpu_percent": psutil.cpu_percent(interval=1),
+                "cpu_percent": psutil.cpu_percent(interval=None),
                 "memory_percent": psutil.virtual_memory().percent,
                 "disk_percent": psutil.disk_usage("/").percent,
                 "net_bytes_sent": psutil.net_io_counters().bytes_sent,
@@ -87,9 +87,17 @@ def collect_metrics_periodically(
     """
 
     results = []
+
+    if psutil is not None:
+        # Warm up CPU percent to avoid a blocking first measurement
+        psutil.cpu_percent(interval=None)
+
     for i in range(iterations):
+        start = time.perf_counter()
         results.append(collect_metrics(output_file))
         if i < iterations - 1:
-            time.sleep(max(0.0, interval_seconds))
+            elapsed = time.perf_counter() - start
+            sleep_duration = max(0.0, interval_seconds - elapsed)
+            time.sleep(sleep_duration)
     return results
 
