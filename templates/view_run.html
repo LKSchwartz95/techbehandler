@@ -203,6 +203,10 @@
                                 <pre><code>{{ llm_params_json }}</code></pre>
                                 <h6 class="mt-3">Diagnostic Data</h6>
                                 <pre id="diagnosticPre"><code>{{ thread_dump_details }}</code></pre>
+                                {% if pcap_sample %}
+                                <h6 class="mt-3">Packet Capture Preview</h6>
+                                <pre id="pcapSamplePre"><code>{{ pcap_sample }}</code></pre>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
