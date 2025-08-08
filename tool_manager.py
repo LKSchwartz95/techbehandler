@@ -37,19 +37,21 @@ class DownloadWorker(QObject):
         try:
             self.save_path.parent.mkdir(parents=True, exist_ok=True)
             self.extract_path.mkdir(parents=True, exist_ok=True)
-            with requests.get(self.url, stream=True, allow_redirects=True, timeout=30) as r:
-                r.raise_for_status()
-                total_size = int(r.headers.get('content-length', 0))
-                downloaded_size = 0
-                with open(self.save_path, 'wb') as f:
-                    for chunk in r.iter_content(chunk_size=8192):
-                        if self.is_cancelled:
-                            self.error.emit("Download cancelled.")
-                            return
-                        f.write(chunk)
-                        downloaded_size += len(chunk)
-                        if total_size > 0:
-                            self.progress.emit(int((downloaded_size / total_size) * 100))
+            with requests.Session() as session:
+                session.headers.update({'User-Agent': 'Techbehandler'})
+                with session.get(self.url, stream=True, allow_redirects=True, timeout=30) as r:
+                    r.raise_for_status()
+                    total_size = int(r.headers.get('content-length', 0))
+                    downloaded_size = 0
+                    with open(self.save_path, 'wb') as f:
+                        for chunk in r.iter_content(chunk_size=8192):
+                            if self.is_cancelled:
+                                self.error.emit("Download cancelled.")
+                                return
+                            f.write(chunk)
+                            downloaded_size += len(chunk)
+                            if total_size > 0:
+                                self.progress.emit(int((downloaded_size / total_size) * 100))
             
             self.progress.emit(100)
             if self.is_cancelled:
