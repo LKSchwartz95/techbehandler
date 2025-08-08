@@ -56,18 +56,24 @@ class CaptureWorker(QObject):
                 tshark_path=self.tshark_path,
                 custom_parameters=['-w', self.output_file]
             )
+            elapsed = 0
+            chunk_seconds = 1
+            while elapsed < self.duration:
+                remaining = min(chunk_seconds, self.duration - elapsed)
+                capture.sniff(timeout=remaining)
+                elapsed += remaining
+                self.countdown.emit(self.duration - elapsed)
+                if self.is_cancelled:
+                    capture.close()
+                    if os.path.exists(self.output_file):
+                        try:
+                            os.remove(self.output_file)
+                        except OSError as e:
+                            self.progress.emit(f"Could not delete partial capture file: {e}")
+                    self.error.emit("Capture was cancelled.")
+                    return
 
-            capture.sniff(timeout=self.duration)  # ✅ THE CRITICAL MISSING LINE
             capture.close()
-
-            if self.is_cancelled:
-                if os.path.exists(self.output_file):
-                    try:
-                        os.remove(self.output_file)
-                    except OSError as e:
-                        self.progress.emit(f"Could not delete partial capture file: {e}")
-                self.error.emit("Capture was cancelled.")
-                return
 
             self.countdown.emit(0)
             self.progress.emit("Finalizing capture file...")
