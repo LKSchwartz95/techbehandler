@@ -1,13 +1,21 @@
+
 # Filename: capture_dialog.py
+import os
+import time
 import asyncio
+import sys
 import ctypes
+import pyshark
+from pathlib import Path
+from pyshark.tshark.tshark import get_tshark_interfaces
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+import threading
 import os
 import sys
 import time
-from pathlib import Path
 
-import pyshark
-from pyshark.tshark.tshark import get_tshark_interfaces
+
 
 from PySide6.QtCore import QObject, Signal, QThread
 from PySide6.QtWidgets import (
@@ -44,18 +52,49 @@ class CaptureWorker(QObject):
         self.is_cancelled = False
 
     def run(self):
+
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+
+        file_ready_event = threading.Event()
+
+        class _FileReadyHandler(FileSystemEventHandler):
+            def __init__(self, file_path, event):
+                self._file_path = os.path.abspath(file_path)
+                self._event = event
+
+            def _check_ready(self, src_path):
+                if os.path.abspath(src_path) == self._file_path:
+                    try:
+                        if os.path.getsize(self._file_path) > 100:
+                            self._event.set()
+                    except OSError:
+                        pass
+
+            def on_created(self, event):
+                if not event.is_directory:
+                    self._check_ready(event.src_path)
+
+            def on_modified(self, event):
+                if not event.is_directory:
+                    self._check_ready(event.src_path)
+
+        watch_dir = os.path.dirname(self.output_file) or "."
+        observer = Observer()
+        observer.schedule(_FileReadyHandler(self.output_file, file_ready_event), watch_dir, recursive=False)
+        observer.start()
 
         try:
             self.progress.emit(f"Starting capture on '{self.interface}' for {self.duration} seconds...")
             os.makedirs(os.path.dirname(self.output_file), exist_ok=True)
+
 
             capture = pyshark.LiveCapture(
                 interface=self.interface,
                 tshark_path=self.tshark_path,
                 custom_parameters=['-w', self.output_file]
             )
+
             elapsed = 0
             chunk_seconds = 1
             while elapsed < self.duration:
@@ -101,6 +140,7 @@ class CaptureWorker(QObject):
             self.error.emit(f"An error occurred during capture:\n{e}")
         finally:
             loop.close()
+
 
 
 class LiveCaptureDialog(QDialog):
