@@ -92,7 +92,8 @@ Your response:
         "reduce_llm_context": True,
         "basic_wireshark_tasks": True
     },
-    "lite_mode_enabled": False
+    "lite_mode_enabled": False,
+    "dashboard_api_token": ""
 }
 
 def load_settings():

@@ -46,6 +46,19 @@ python main.py dashboard
 Then browse to [http://localhost:5000/](http://localhost:5000/) to view the web dashboard.
 To protect the dashboard with a login prompt, set the environment variables `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD` before starting the app. A `DASHBOARD_SECRET_KEY` can also be supplied to override the default session secret.
 
+For API-only access you can secure the dashboard with a bearer token. Generate a random value using `secrets` and provide it via the `DASHBOARD_API_TOKEN` environment variable or the `--token` command-line argument:
+
+```bash
+export DASHBOARD_API_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+python main.py dashboard
+```
+
+Clients must send the token in an `Authorization` header:
+
+```bash
+curl -H "Authorization: Bearer $DASHBOARD_API_TOKEN" http://localhost:5000/api/runs
+```
+
 The application stores output under the `Resultat` directory.
 
 ### Guard Mode
