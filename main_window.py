@@ -1068,7 +1068,22 @@ class MainWindow(QWidget):
                 QMessageBox.warning(self, "MAT Not Found", "Eclipse MAT is required for HPROF analysis.\nPlease use the Tool Manager to install it.", QMessageBox.StandardButton.Ok)
                 self._analysis_ended_or_failed(); return
             prompt_name = "HPROF Comprehensive Analysis"
-            extra_args.extend(["--mat-memory", str(self.mat_memory_spinbox.value()), "--mat-report-arg", self.mat_report_type_combo.currentData(), "--mat-launcher-path", tool_launcher])
+            selected_mat_id = self.mat_report_type_combo.currentData()
+            mat_arg_map = {
+                opt["id"]: opt["mat_arg"]
+                for opt in config_handler.DEFAULT_SETTINGS["mat_report_options"]
+            }
+            selected_mat_arg = mat_arg_map.get(selected_mat_id, selected_mat_id)
+            extra_args.extend([
+                "--mat-memory",
+                str(self.mat_memory_spinbox.value()),
+                "--mat-report-id",
+                selected_mat_id,
+                "--mat-report-arg",
+                selected_mat_arg,
+                "--mat-launcher-path",
+                tool_launcher,
+            ])
         
         elif is_txt:
             self.settings_tabs.setCurrentWidget(self.hprof_tab)

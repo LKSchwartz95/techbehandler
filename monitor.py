@@ -185,6 +185,7 @@ def main(argv_to_parse=None):
     parser.add_argument("--ollama-cmd", required=True, help="Path to Ollama CLI.")
     parser.add_argument("--llm-params", type=str, default="{}", help="JSON string of LLM parameters.")
     parser.add_argument("--mat-memory", type=int, help="Memory for MAT in MB (HPROF only).")
+    parser.add_argument("--mat-report-id", help="User-facing MAT report type id (HPROF only).")
     parser.add_argument("--mat-report-arg", help="MAT API argument for report type (HPROF only).")
     parser.add_argument("--mat-launcher-path", help="Path to the MAT launcher JAR (HPROF only).")
     parser.add_argument("--tshark-path", help="Path to tshark executable (pcap only).")
@@ -233,8 +234,9 @@ def main(argv_to_parse=None):
         "analysis_type": analysis_type,
         "analysis_timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "model_used": args.model, "ollama_executable_used": args.ollama_cmd, 
-        "mat_memory_mb_used": args.mat_memory if is_hprof else "N/A", 
-        "mat_report_arg_used": args.mat_report_arg if is_hprof else "N/A", 
+        "mat_memory_mb_used": args.mat_memory if is_hprof else "N/A",
+        "mat_report_id_used": args.mat_report_id if is_hprof else "N/A",
+        "mat_report_arg_used": args.mat_report_arg if is_hprof else "N/A",
         "prompt_template_used": args.prompt or "Default", "llm_parameters_used": llm_parameters, 
         "status": "started", "user_status": "pending",
         "llm_generated_tags": []
@@ -320,7 +322,10 @@ def main(argv_to_parse=None):
         with open(md_path, "w", encoding="utf-8") as f: 
             f.write(f"# Analysis Report for {os.path.basename(args.input_file)}\n\n")
             f.write(f"* **Model Used:** {args.model}\n")
-            if is_hprof: f.write(f"* **MAT Report Type:** {args.mat_report_arg}\n")
+            if is_hprof:
+                f.write(
+                    f"* **MAT Report Type:** {args.mat_report_id} ({args.mat_report_arg})\n"
+                )
             f.write(f"* **Timestamp (UTC):** {metadata['analysis_timestamp_utc']}\n\n")
             f.write(f"## LLM Parameters Used\n```json\n{json.dumps(llm_parameters, indent=2)}\n```\n\n")
             f.write(md_content_header)
