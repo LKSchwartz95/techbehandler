@@ -258,6 +258,7 @@ def view_run(run):
 
     mat_idx_link_txt = "MAT Report (Not Found)"
     mat_toc_link_txt = "MAT TOC (Not Found)"
+    mat_toc_entries = []
     
     if mat_report_entry_file:
         mat_report_full_path = os.path.join(run_dir_path, mat_report_entry_file)
@@ -266,6 +267,24 @@ def view_run(run):
         mat_toc_path = os.path.join(os.path.dirname(mat_report_full_path), "toc.html")
         if os.path.isfile(mat_toc_path):
             mat_toc_link_txt = "MAT Table of Contents"
+            try:
+                with open(mat_toc_path, "r", encoding="utf-8", errors="ignore") as f_toc:
+                    toc_soup = BeautifulSoup(f_toc.read(), "lxml")
+                for a in toc_soup.find_all("a", href=True):
+                    href = a["href"]
+                    text = a.get_text(strip=True) or href
+                    if href.startswith(("#", "javascript:")):
+                        continue
+                    asset_path_from_toc = Path(os.path.dirname(mat_report_entry_file)) / href
+                    clean_fn = os.path.normpath(asset_path_from_toc).replace("\\", "/")
+                    if clean_fn.startswith("../"):
+                        continue
+                    mat_toc_entries.append({
+                        "text": text,
+                        "url": url_for("get_file_from_run", run=run, filename=clean_fn)
+                    })
+            except Exception as e:
+                log_dashboard_error(f"Err parsing MAT TOC for {run}: {e}")
 
         try:
             with open(mat_report_full_path, "r", encoding="utf-8", errors="ignore") as f_mat_idx:
@@ -340,9 +359,10 @@ def view_run(run):
         mat_overview_pie_chart_url=mat_pie_src, 
         mat_report_index_link_text=mat_idx_link_txt,
         mat_report_toc_link_text=mat_toc_link_txt,
-        mat_report_entry_file=mat_report_entry_file, 
+        mat_report_entry_file=mat_report_entry_file,
+        mat_toc_entries=mat_toc_entries,
         other_run_files=other_files,
-        mat_report_type_used=run_info.get("mat_report_type"), 
+        mat_report_type_used=run_info.get("mat_report_type"),
         user_status=run_info.get("user_status"),
         llm_tags=run_info.get("llm_generated_tags", []),
         llm_params_json=run_info.get("llm_params_json", "{}"),
