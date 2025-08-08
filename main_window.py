@@ -1526,7 +1526,9 @@ class MainWindow(QWidget):
             self.append_console("Webboard is not running.")
 
     def _is_port_available(self, port):
+        """Return True if the given TCP port is free, False otherwise."""
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             try:
                 s.bind(("", port))
             except OSError:
