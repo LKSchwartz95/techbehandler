@@ -9,7 +9,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 CONFIG_FILE_PATH = PROJECT_ROOT / "config.json"
 
 DEFAULT_SETTINGS = {
-    "default_ollama_model": "gemma3:1b", "ollama_dashboard_port": 5000, "mat_memory_mb": 4096,
+    "default_ollama_model": "gemma3:1b", "ollama_dashboard_port": 5000, "webboard_port": 5001, "mat_memory_mb": 4096,
     "guard_mode_folder": "", "guard_mode_enabled": False, "guard_mode_interval_minutes": 1,
     "saved_prompts": [
         {"name": "HPROF Comprehensive Analysis", "template": """You are an expert Java performance analyst.
