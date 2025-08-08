@@ -672,7 +672,7 @@ def reevaluate_run(run_name):
         return jsonify({"success": False, "error": f"Failed to save new analysis: {e}"}), 500
 
 def main(argv=None, *, port=5000, host="127.0.0.1", token=None):
-    ensure_resultdir()
+    ensure_resultat_dir()
     if argv:
         i = 0
         while i < len(argv):
