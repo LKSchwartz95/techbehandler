@@ -261,6 +261,7 @@ def view_run(run):
     mat_toc_entries = []
     toc_relpaths = set()
     mat_extra_index_entries = []
+
     
     if mat_report_entry_file:
         mat_report_full_path = os.path.join(run_dir_path, mat_report_entry_file)
@@ -285,6 +286,7 @@ def view_run(run):
                         "text": text,
                         "url": url_for("get_file_from_run", run=run, filename=clean_fn)
                     })
+
                     toc_relpaths.add(clean_fn)
             except Exception as e:
                 log_dashboard_error(f"Err parsing MAT TOC for {run}: {e}")
@@ -309,6 +311,7 @@ def view_run(run):
         try:
             with open(mat_report_full_path, "r", encoding="utf-8", errors="ignore") as f_mat_idx:
                 soup = BeautifulSoup(f_mat_idx.read(), "lxml")
+
             
             report_type = run_info.get("mat_report_type", "").lower()
             if "suspects" in report_type:
@@ -381,10 +384,12 @@ def view_run(run):
         mat_report_toc_link_text=mat_toc_link_txt,
         mat_report_entry_file=mat_report_entry_file,
         mat_toc_entries=mat_toc_entries,
+
         mat_index_files=mat_extra_index_entries,
         other_run_files=other_files,
         mat_report_type_used=run_info.get("mat_report_type"),
         user_status=run_info.get("user_status"),
+
         llm_tags=run_info.get("llm_generated_tags", []),
         llm_params_json=run_info.get("llm_params_json", "{}"),
         user_notes=run_info.get("user_notes", ""),
