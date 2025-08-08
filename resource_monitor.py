@@ -109,10 +109,18 @@ def collect_metrics_periodically(
     """
 
     results = []
+
+    if psutil is not None:
+        # Warm up CPU percent to avoid a blocking first measurement
+        psutil.cpu_percent(interval=None)
+
     for i in range(iterations):
+        start = time.perf_counter()
         results.append(collect_metrics(output_file))
         if i < iterations - 1:
-            time.sleep(max(0.0, interval_seconds))
+            elapsed = time.perf_counter() - start
+            sleep_duration = max(0.0, interval_seconds - elapsed)
+            time.sleep(sleep_duration)
     return results
 
 
