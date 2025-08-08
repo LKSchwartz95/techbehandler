@@ -10,7 +10,22 @@ RESULTAT_DIR = PROJECT_ROOT / "Resultat"
 
 
 def collect_metrics(output_file: str | os.PathLike):
-    """Collect basic system metrics and append as a JSON line."""
+    """Collect basic system metrics and append as a JSON line.
+
+    Parameters
+    ----------
+    output_file:
+        Destination file for the metrics. If the path points to the current
+        working directory (i.e. has no parent folder), the directory creation
+        step is skipped.
+    """
+
+    output_path = Path(output_file)
+    # ``Path.output_path.parent`` resolves to ``'.'`` when no directory
+    # component is provided. ``mkdir`` on ``'.'`` is a no-op, which allows
+    # callers to write metrics directly to the current working directory.
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
     metrics = {
         "timestamp": time.time(),
         "cpu_percent": psutil.cpu_percent(interval=1),
@@ -19,8 +34,8 @@ def collect_metrics(output_file: str | os.PathLike):
         "net_bytes_sent": psutil.net_io_counters().bytes_sent,
         "net_bytes_recv": psutil.net_io_counters().bytes_recv,
     }
-    os.makedirs(os.path.dirname(output_file), exist_ok=True)
-    with open(output_file, "a", encoding="utf-8") as f:
+
+    with output_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(metrics) + "\n")
     return metrics
 
@@ -30,7 +45,7 @@ def collect_once_in_resultat(run_name: str):
     run_dir = RESULTAT_DIR / run_name
     os.makedirs(run_dir, exist_ok=True)
     out_path = run_dir / "system_metrics.jsonl"
-    return collect_metrics(str(out_path))
+    return collect_metrics(out_path)
 
 
 def collect_metrics_periodically(

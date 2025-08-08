@@ -26,6 +26,16 @@ def test_collect_metrics(tmp_path: Path):
     assert metrics["cpu_percent"] == data["cpu_percent"]
 
 
+def test_collect_metrics_current_directory(tmp_path: Path, monkeypatch):
+    """Collect metrics when output path is in the current working directory."""
+    monkeypatch.chdir(tmp_path)
+    out_file = Path("metrics.jsonl")
+    metrics = collect_metrics(out_file)
+    assert out_file.exists()
+    data = json.loads(out_file.read_text().splitlines()[0])
+    assert metrics["cpu_percent"] == data["cpu_percent"]
+
+
 def test_collect_metrics_periodically(tmp_path: Path):
     out_file = tmp_path / "metrics.jsonl"
     results = collect_metrics_periodically(out_file, iterations=3, interval_seconds=0)
