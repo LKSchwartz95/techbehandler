@@ -424,10 +424,6 @@ def view_run(run):
         md_name_only = os.path.basename(run_info["md_filename_processed"]) if run_info.get("md_filename_processed") else ""
 
         excluded_files = {"run_metadata.json", md_name_only}
-        if mat_report_entry_file:
-            excluded_files.add(mat_report_entry_file)
-            toc_candidate = os.path.join(os.path.dirname(mat_report_entry_file), "toc.html").replace("\\", "/")
-            excluded_files.add(toc_candidate)
 
         for root_dir, _, files in os.walk(run_dir_path):
             for f in files:
