@@ -1,5 +1,6 @@
 import os
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -59,10 +60,16 @@ def run_yara_scan(rule_file: str | os.PathLike, target: str | os.PathLike, run_d
 def run_all_scans(run_name: str, yara_rule: str | os.PathLike | None = None, yara_target: str | os.PathLike | None = None):
     run_dir = RESULTAT_DIR / run_name
     os.makedirs(run_dir, exist_ok=True)
-    results = {
-        "lynis": run_lynis_scan(run_dir),
-        "osquery": run_osquery_scan(run_dir),
-    }
-    if yara_rule and yara_target:
-        results["yara"] = run_yara_scan(yara_rule, yara_target, run_dir)
+
+    with ThreadPoolExecutor() as executor:
+        futures = {
+            "lynis": executor.submit(run_lynis_scan, run_dir),
+            "osquery": executor.submit(run_osquery_scan, run_dir),
+        }
+
+        if yara_rule and yara_target:
+            futures["yara"] = executor.submit(run_yara_scan, yara_rule, yara_target, run_dir)
+
+        results = {name: future.result() for name, future in futures.items()}
+
     return results
