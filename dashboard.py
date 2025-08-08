@@ -147,7 +147,7 @@ def index():
     return render_template("index.html", runs_with_status=runs_with_status)
 
 
-@app.route("/api/runs") 
+@app.route("/api/runs")
 def get_runs_api():
     ensure_resultat_dir(); runs_with_status = []
     try:
@@ -167,6 +167,25 @@ def get_runs_api():
             runs_with_status.append({"name": run_name, "user_status": status, "tags": tags})
     except Exception as e: log_dashboard_error(f"API Err read Resultat: {e}"); return jsonify({"error": str(e)}), 500
     return jsonify(runs_with_status)
+
+
+@app.route("/api/metrics/<run>")
+def get_metrics_api(run):
+    """Return recent system metrics for a run in JSON form."""
+
+    ensure_resultat_dir()
+    metrics_file = os.path.join(RESULTAT_DIR_DASHBOARD, run, "system_metrics.jsonl")
+    if not os.path.isfile(metrics_file):
+        return jsonify([])
+
+    try:
+        with open(metrics_file, "r", encoding="utf-8") as f:
+            lines = f.readlines()[-100:]
+        entries = [json.loads(line) for line in lines if line.strip()]
+        return jsonify(entries)
+    except Exception as e:
+        log_dashboard_error(f"Metrics: failed to read {metrics_file}: {e}")
+        return jsonify({"error": str(e)}), 500
 
 def _load_run_data_common(run_dir_path, run_name_for_log):
     data = {
