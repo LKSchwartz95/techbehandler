@@ -1,8 +1,12 @@
 import os
 import subprocess
 from pathlib import Path
+import sys
 
 PROJECT_ROOT = Path(__file__).resolve().parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.append(str(PROJECT_ROOT))
+from utils import sanitize_run_name
 RESULTAT_DIR = PROJECT_ROOT / "Resultat"
 
 
@@ -20,6 +24,7 @@ def run_nmap_scan(target: str, run_dir: Path) -> str:
 
 
 def scan_target(target: str, run_name: str):
+    run_name = sanitize_run_name(run_name)
     run_dir = RESULTAT_DIR / run_name
     os.makedirs(run_dir, exist_ok=True)
     return run_nmap_scan(target, run_dir)
