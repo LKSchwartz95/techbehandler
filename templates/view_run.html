@@ -237,7 +237,7 @@
                             <a href="#" class="list-group-item list-group-item-action view-file" data-file-url="{{ entry.url }}">{{ entry.text }}</a>
                             {% endfor %}
                             {% for file in viewable_run_files %}
-                            <a href="#" class="list-group-item list-group-item-action view-file" data-file-url="{{ url_for('get_file_from_run', run=run_name, filename=file) }}">{{ file }}</a>
+                            <a href="#" class="list-group-item list-group-item-action view-file" data-file-url="{{ url_for('preview_file_from_run', run=run_name, filename=file) }}">{{ file }}</a>
                             {% endfor %}
                         </div>
                     </div>

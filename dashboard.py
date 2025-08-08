@@ -107,6 +107,15 @@ def ensure_resultat_dir():
         try: os.makedirs(RESULTAT_DIR_DASHBOARD)
         except OSError as e: print(f"ERROR: Create Resultat dir fail: {e}.", file=sys.stderr, flush=True); sys.exit(1)
 
+def _hexdump(buf: bytes, width: int = 16) -> str:
+    lines = []
+    for i in range(0, len(buf), width):
+        chunk = buf[i:i+width]
+        hex_part = " ".join(f"{b:02x}" for b in chunk)
+        ascii_part = "".join(chr(b) if 32 <= b < 127 else "." for b in chunk)
+        lines.append(f"{i:08x}  {hex_part:<{width*3}} {ascii_part}")
+    return "\n".join(lines)
+
 def log_dashboard_error(message):
     print(f"DASHBOARD_ERR: [{datetime.now()}] {message}", file=sys.stderr, flush=True)
     try:
@@ -336,15 +345,6 @@ def _load_run_data_common(run_dir_path, run_name_for_log):
                 with open(sample_path, "rb") as f_pcap:
                     sample_bytes = f_pcap.read(256)
 
-                def _hexdump(buf: bytes, width: int = 16) -> str:
-                    lines = []
-                    for i in range(0, len(buf), width):
-                        chunk = buf[i:i+width]
-                        hex_part = " ".join(f"{b:02x}" for b in chunk)
-                        ascii_part = "".join(chr(b) if 32 <= b < 127 else "." for b in chunk)
-                        lines.append(f"{i:08x}  {hex_part:<{width*3}} {ascii_part}")
-                    return "\n".join(lines)
-
                 data["pcap_sample"] = _hexdump(sample_bytes)
         except Exception as e_pcap:
             log_dashboard_error(f"Error extracting pcap preview for {run_name_for_log}: {e_pcap}")
@@ -424,6 +424,11 @@ def view_run(run):
         md_name_only = os.path.basename(run_info["md_filename_processed"]) if run_info.get("md_filename_processed") else ""
 
         excluded_files = {"run_metadata.json", md_name_only}
+        if mat_report_entry_file:
+            excluded_files.add(mat_report_entry_file)
+            excluded_files.add(mat_report_entry_file.replace("index.html", "toc.html"))
+        excluded_files.update(toc_relpaths)
+        excluded_files.update(entry["text"] for entry in mat_extra_index_entries)
 
         for root_dir, _, files in os.walk(run_dir_path):
             for f in files:
@@ -433,11 +438,7 @@ def view_run(run):
                 other_files.append(rel_path)
 
         other_files = sorted(other_files)
-
-        viewable_exts = {".txt", ".log", ".html", ".htm", ".json", ".md", ".csv"}
-        for f in other_files:
-            if os.path.splitext(f.lower())[1] in viewable_exts:
-                viewable_files.append(f)
+        viewable_files = list(other_files)
 
     except Exception as e:
         log_dashboard_error(f"Err listing files for {run}: {e}")
@@ -538,6 +539,35 @@ def get_file_from_run(run, filename):
         abort(404)
         
     return send_from_directory(run_dir_abs, filename)
+
+@app.route("/run/<run>/preview/<path:filename>")
+def preview_file_from_run(run, filename):
+    ensure_resultat_dir()
+    run_dir_abs = os.path.abspath(os.path.join(RESULTAT_DIR_DASHBOARD, run))
+    file_abs = os.path.abspath(os.path.join(run_dir_abs, filename))
+
+    if not file_abs.startswith(run_dir_abs):
+        log_dashboard_error(f"Path traversal attempt blocked: Run='{run}', Filename='{filename}'")
+        abort(403)
+
+    if not os.path.exists(file_abs) or not os.path.isfile(file_abs):
+        abort(404)
+
+    text_exts = {".txt", ".log", ".html", ".htm", ".json", ".md", ".csv"}
+    ext = os.path.splitext(filename.lower())[1]
+    if ext in text_exts:
+        return send_from_directory(run_dir_abs, filename)
+
+    try:
+        with open(file_abs, "rb") as f:
+            content = f.read(64 * 1024)
+        hexdumped = _hexdump(content)
+        if os.path.getsize(file_abs) > len(content):
+            hexdumped += f"\n... (truncated, total {os.path.getsize(file_abs)} bytes)"
+        return Response(hexdumped, mimetype="text/plain")
+    except Exception as e:
+        log_dashboard_error(f"Error previewing file '{filename}' for run '{run}': {e}")
+        abort(500)
 
 @app.route("/compare")
 def compare_runs():
