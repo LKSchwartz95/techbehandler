@@ -1497,5 +1497,7 @@ class MainWindow(QWidget):
         if self.dashboard_proc and self.dashboard_proc.state() != QProcess.NotRunning: self.dashboard_proc.kill(); self.dashboard_proc.waitForFinished(3000)
         if self.webboard_proc and self.webboard_proc.state() != QProcess.NotRunning: self.webboard_proc.kill(); self.webboard_proc.waitForFinished(3000)
         if self.pull_model_proc and self.pull_model_proc.state() != QProcess.NotRunning: self.pull_model_proc.kill(); self.pull_model_proc.waitForFinished(3000)
+
         self.stop_ollama_server()
         super().closeEvent(event)
+

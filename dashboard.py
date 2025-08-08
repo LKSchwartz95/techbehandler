@@ -671,41 +671,46 @@ def reevaluate_run(run_name):
         log_dashboard_error(f"Re-eval: Failed to update files for {run_name}: {e}")
         return jsonify({"success": False, "error": f"Failed to save new analysis: {e}"}), 500
 
-def main(argv=None):
-    ensure_resultat_dir(); port, host, token = 5000, "127.0.0.1", None
+def main(argv=None, *, port=5000, host="127.0.0.1", token=None):
+    ensure_resultdir()
     if argv:
-        i=0
+        i = 0
         while i < len(argv):
             arg = argv[i]
-            if arg == "--port" and i + 1 < len(argv):
-                try: port = int(argv[i+1]); i+=1
-                except ValueError: print(f"WARN: Invalid port '{argv[i+1]}'", file=sys.stderr)
-            elif arg.startswith("--port="):
-                try: port = int(arg.split("=",1)[1])
-                except ValueError: print(f"WARN: Invalid port in '{arg}'", file=sys.stderr)
-            elif arg == "--host" and i + 1 < len(argv): host = argv[i+1]; i+=1
-            elif arg.startswith("--host="): host = arg.split("=",1)[1]
-            elif arg == "--token" and i + 1 < len(argv): token = argv[i+1]; i+=1
-            elif arg.startswith("--token="): token = arg.split("=",1)[1]
-            elif arg == "--help":
-                print("Usage: dashboard.py [--port P] [--host H] [--token T]");
-                return 0
-            i+=1
+            if arg == "-p" and i + 1 < len(argv):
+                i += 1
+                try: port = int(argv[i])
+                except ValueError: print("Invalid port [%r]" % argv[i], file=sys.stderr)
+            elif arg == "-h" and i + 1 < len(argv):
+                i += 1
+                host = argv[i]
+            elif arg == "--token" and i + 1 < len(argv):
+                i += 1
+                token = argv[i]
+            elif arg.startswith("--host="): host = arg.split("=")[1]
+            elif arg.startswith("--port="): port = int(arg.split("=")[1])
+            elif arg == "--help": print("Usage: dashboard.py [-p port] [-h host] [--token T]"); return 1
+            i += 1
+
     if token:
-        app.config["TOKEN_AUTH"] = True
-        app.config["READ_ONLY_MODE"] = True
-        null_app = lambda environ, start_response: WsgiResponse('Not Found', status=404)(environ, start_response)
-        dispatch_app = DispatcherMiddleware(null_app, {f'/{token}': app})
-        print(f"Webboard starting. Results: {RESULTAT_DIR_DASHBOARD}. URL: http://{host}:{port}/{token}/", flush=True)
+        app.config["TOKEN_AUTH"] = token
+        def missing_model_html(start_response):
+            start_response("404 Not Found", [('Content-Type', 'text/html')])
+            return [b"<h1>Model not found</h1>"]
+        dispatch_app = DispatcherMiddleware(missing_model_html, {
+            "/": app
+        })
+        print(f"WebDashboard (auth) → http://{host}:{port}", flush=True)
         try:
-            run_simple(hostname=host, port=port, application=dispatch_app, use_reloader=False)
-        except OSError as e:
-            print(f"ERROR Flask: {e}", file=sys.stderr); log_dashboard_error(f"Flask start fail: {e}"); return 1
+            run_simple(host, port, dispatch_app, use_reloader=False)
+        except OSError as e: print(f"Flask start fail: {e}"); return 1
         return 0
-    print(f"Flask dashboard starting. Results: {RESULTAT_DIR_DASHBOARD}. URL: http://{host}:{port}/", flush=True)
-    try: app.run(host=host, port=port, debug=False) # Debug=False for production/distribution
-    except OSError as e: print(f"ERROR Flask: {e}", file=sys.stderr); log_dashboard_error(f"Flask start fail: {e}"); return 1
+
+    print(f"Flask dashboard starting. Results: {RESULTAT_DIR_DASHBOARD} — URL: http://{host}:{port}/", flush=True)
+    try: app.run(host=host, port=port)
+    except OSError as e: print(f"Flask start fail: {e}"); log_dashboard_error(f"Flask start fail: {e}"); return 1
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))
