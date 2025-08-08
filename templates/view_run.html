@@ -113,6 +113,27 @@
             </div>
         </div>
 
+        <!-- LLM Analysis -->
+        <div class="card mb-4">
+            <div class="card-header fs-5 d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-robot"></i> LLM Analysis</span>
+                <small class="text-muted" id="model-used-display">Model: {{ model_used }}</small>
+            </div>
+            <div class="card-body llm-analysis-body">
+                <div class="mb-3" id="tags-container">
+                    {% for tag in llm_tags %}
+                        <span class="badge rounded-pill text-bg-primary tag">{{ tag }}</span>
+                    {% else %}
+                        <span class="text-muted">No tags generated.</span>
+                    {% endfor %}
+                </div>
+                <hr>
+                <div id="llm-analysis-content">
+                    {{ llm_analysis_html|safe }}
+                </div>
+            </div>
+        </div>
+
         {% if 'not available' not in mat_problem_suspect_html %}
         <!-- MAT Problem Suspect Details -->
         <div class="card mb-4">
@@ -161,27 +182,6 @@
                     {% if not mat_report_entry_file and not mat_toc_entries and not mat_index_files %}
                     <span class="list-group-item text-muted">No table of contents entries available.</span>
                     {% endif %}
-                </div>
-            </div>
-        </div>
-
-        <!-- LLM Analysis -->
-        <div class="card mb-4">
-            <div class="card-header fs-5 d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-robot"></i> LLM Analysis</span>
-                <small class="text-muted" id="model-used-display">Model: {{ model_used }}</small>
-            </div>
-            <div class="card-body llm-analysis-body">
-                <div class="mb-3" id="tags-container">
-                    {% for tag in llm_tags %}
-                        <span class="badge rounded-pill text-bg-primary tag">{{ tag }}</span>
-                    {% else %}
-                        <span class="text-muted">No tags generated.</span>
-                    {% endfor %}
-                </div>
-                <hr>
-                <div id="llm-analysis-content">
-                    {{ llm_analysis_html|safe }}
                 </div>
             </div>
         </div>
