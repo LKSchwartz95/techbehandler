@@ -174,34 +174,29 @@ class ToolManagerDialog(QDialog):
             )
 
             if install_dir is not None:
-
                 if update_available:
                     status_item.setText(f"Update available ({remote_version})")
                     status_item.setForeground(Qt.GlobalColor.darkYellow)
                     action_button.setText("Update")
+                    if remote_version:
+                        # Display the newest version if it differs from the bundled one
+                        self.table.setItem(row_index, 1, QTableWidgetItem(remote_version))
                 else:
                     status_item.setText("Installed")
                     status_item.setForeground(Qt.GlobalColor.darkGreen)
                     action_button.setText("Re-install")
-
             else:
                 status_item.setText("Not Installed")
                 status_item.setForeground(Qt.GlobalColor.red)
                 action_button.setText("Download & Install")
-
                 uninstall_button.setEnabled(False)
-
-            self.table.setItem(row_index, 3, status_item)
-            action_button.clicked.connect(lambda checked, t=tool, r=row_index: self.start_download(t, r))
-            uninstall_button.clicked.connect(lambda checked, t=tool, r=row_index: self.uninstall_tool(t, r))
-
-                if remote_version:
-                    # Display the newest version if it differs from the bundled one
-                    self.table.setItem(row_index, 1, QTableWidgetItem(remote_version))
 
             self.table.setItem(row_index, 3, status_item)
             action_button.clicked.connect(
                 lambda checked, t=latest_tool, r=row_index: self.start_download(t, r)
+            )
+            uninstall_button.clicked.connect(
+                lambda checked, t=tool, r=row_index: self.uninstall_tool(t, r)
             )
 
             self.table.setCellWidget(row_index, 4, action_button)

@@ -64,7 +64,12 @@ def write_nmap_json(output_file: Path) -> Path:
     return json_path
 
 
-def run_nmap_scan(target: str, run_dir: Path) -> str:
+def run_nmap_scan(
+    target: str,
+    run_dir: Path,
+    extra_options: Optional[List[str]] = None,
+    timeout: int = 60,
+) -> str:
     """Run an nmap scan if nmap is available and create a JSON report."""
 
     output_file = run_dir / f"nmap_{target.replace('/', '_')}.txt"
@@ -76,10 +81,16 @@ def run_nmap_scan(target: str, run_dir: Path) -> str:
         with open(output_file, "w", encoding="utf-8") as f:
             try:
                 result = subprocess.run(
-                    cmd, stdout=f, stderr=subprocess.STDOUT, check=False, timeout=timeout
+                    cmd,
+                    stdout=f,
+                    stderr=subprocess.STDOUT,
+                    check=False,
+                    timeout=timeout,
                 )
                 if result.returncode != 0:
-                    f.write(f"\nCommand exited with return code {result.returncode}\n")
+                    f.write(
+                        f"\nCommand exited with return code {result.returncode}\n"
+                    )
             except subprocess.TimeoutExpired:
                 f.write("nmap scan timed out\n")
     except FileNotFoundError:
@@ -88,6 +99,14 @@ def run_nmap_scan(target: str, run_dir: Path) -> str:
 
     write_nmap_json(output_file)
     return str(output_file)
+
+
+def load_nmap_json(json_path: Path) -> dict:
+    """Load the JSON output produced by :func:`write_nmap_json`."""
+    try:
+        return json.loads(json_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        return {"error": str(e)}
 
 
 def scan_target(target: str, run_name: str):
