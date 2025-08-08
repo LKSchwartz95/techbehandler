@@ -1,7 +1,11 @@
-import os
+import os  # Needed for filesystem operations and environment queries
 from pathlib import Path
+import sys
 
 PROJECT_ROOT = Path(__file__).resolve().parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.append(str(PROJECT_ROOT))
+from utils import sanitize_run_name
 RESULTAT_DIR = PROJECT_ROOT / "Resultat"
 
 
@@ -21,7 +25,8 @@ def gather_system_logs(run_dir: Path) -> str:
             try:
                 with open(p, "r", encoding="utf-8", errors="ignore") as src:
                     out_f.write(f"--- {p} ---\n")
-                    out_f.write(src.read())
+                    for chunk in iter(lambda: src.read(65536), ""):
+                        out_f.write(chunk)
                     out_f.write("\n")
             except Exception as e:
                 out_f.write(f"Could not read {p}: {e}\n")
@@ -29,6 +34,7 @@ def gather_system_logs(run_dir: Path) -> str:
 
 
 def gather_for_run(run_name: str):
+    run_name = sanitize_run_name(run_name)
     run_dir = RESULTAT_DIR / run_name
     os.makedirs(run_dir, exist_ok=True)
     return gather_system_logs(run_dir)
