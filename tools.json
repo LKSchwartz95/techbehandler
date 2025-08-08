@@ -6,6 +6,7 @@
       "version": "1.14.0",
       "platform": "win64",
       "url": "https://www.eclipse.org/downloads/download.php?file=/mat/1.14.0/rcp/MemoryAnalyzer-1.14.0.202312061735-win32.win32.x86_64.zip",
+      "update_manifest_url": "https://example.com/mat/win64.json",
       "install_path": "tools/mat-1.14.0-win64",
       "launcher_relative_path": "plugins/org.eclipse.equinox.launcher_*.jar"
     },
@@ -15,6 +16,7 @@
       "version": "1.14.0",
       "platform": "linux-x86_64",
       "url": "https://www.eclipse.org/downloads/download.php?file=/mat/1.14.0/rcp/MemoryAnalyzer-1.14.0.202312061735-linux.gtk.x86_64.zip",
+      "update_manifest_url": "https://example.com/mat/linux.json",
       "install_path": "tools/mat-1.14.0-linux",
       "launcher_relative_path": "plugins/org.eclipse.equinox.launcher_*.jar"
     },
@@ -24,6 +26,7 @@
       "version": "1.14.0",
       "platform": "macos-aarch64",
       "url": "https://www.eclipse.org/downloads/download.php?file=/mat/1.14.0/rcp/MemoryAnalyzer-1.14.0.202312061735-macosx.cocoa.aarch64.zip",
+      "update_manifest_url": "https://example.com/mat/macos.json",
       "install_path": "tools/mat-1.14.0-macos",
       "launcher_relative_path": "plugins/org.eclipse.equinox.launcher_*.jar"
     },
@@ -33,6 +36,7 @@
       "version": "4.2.5",
       "platform": "win64",
       "url": "https://www.wireshark.org/download/win64/WiresharkPortable64_4.2.5.exe",
+      "update_manifest_url": "https://example.com/wireshark/win64.json",
       "install_path": "tools/wireshark-4.2.5-win64",
       "launcher_relative_path": "Wireshark/tshark.exe"
     },
@@ -42,6 +46,7 @@
       "version": "4.2.5",
       "platform": "linux-x86_64",
       "url": "https://www.wireshark.org/download/src/all-versions/wireshark-4.2.5.tar.xz",
+      "update_manifest_url": "https://example.com/wireshark/linux.json",
       "install_path": "tools/wireshark-4.2.5-linux",
       "launcher_relative_path": "tshark"
     },
@@ -51,6 +56,7 @@
       "version": "4.2.5",
       "platform": "macos-aarch64",
       "url": "https://www.wireshark.org/download/osx/Wireshark%204.2.5%20Intel%2064.dmg",
+      "update_manifest_url": "https://example.com/wireshark/macos.json",
       "install_path": "tools/wireshark-4.2.5-macos",
       "launcher_relative_path": "tshark"
     }
@@ -61,6 +67,7 @@
       "version": "11.4.1",
       "platform": "win64",
       "url": "https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_11.4.1_build/ghidra_11.4.1_PUBLIC_20250731.zip",
+      "update_manifest_url": "https://example.com/ghidra/win64.json",
       "install_path": "tools/ghidra-11.4.1-win64",
       "launcher_relative_path": "ghidra_11.4.1_PUBLIC/support/analyzeHeadless"
     },
@@ -70,6 +77,7 @@
       "version": "11.4.1",
       "platform": "linux-x86_64",
       "url": "https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_11.4.1_build/ghidra_11.4.1_PUBLIC_20250731.zip",
+      "update_manifest_url": "https://example.com/ghidra/linux.json",
       "install_path": "tools/ghidra-11.4.1-linux",
       "launcher_relative_path": "ghidra_11.4.1_PUBLIC/support/analyzeHeadless"
     },
@@ -79,6 +87,7 @@
       "version": "11.4.1",
       "platform": "macos-aarch64",
       "url": "https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_11.4.1_build/ghidra_11.4.1_PUBLIC_20250731.zip",
+      "update_manifest_url": "https://example.com/ghidra/macos.json",
       "install_path": "tools/ghidra-11.4.1-macos",
       "launcher_relative_path": "ghidra_11.4.1_PUBLIC/support/analyzeHeadless"
     }

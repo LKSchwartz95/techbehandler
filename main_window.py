@@ -17,7 +17,8 @@ from PySide6.QtWidgets import (
     QFileDialog, QSpinBox, QLabel, QPlainTextEdit, QInputDialog,
     QLineEdit, QComboBox, QMessageBox, QTextEdit, QProgressBar,
     QCheckBox, QGroupBox, QFormLayout, QDoubleSpinBox, QMenuBar,
-    QTabWidget, QApplication, QScrollArea, QSizePolicy
+    QTabWidget, QApplication, QScrollArea, QSizePolicy, QDialog,
+    QDialogButtonBox
 )
 from PySide6.QtCore import QProcess, QProcessEnvironment, QTimer, Qt, QUrl, QSettings
 from PySide6.QtGui import QDesktopServices, QAction, QGuiApplication
@@ -26,6 +27,7 @@ from PySide6.QtGui import QDesktopServices, QAction, QGuiApplication
 import config_handler
 from tool_manager import ToolManagerDialog
 from capture_dialog import LiveCaptureDialog
+import security_scanner
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 RESULTAT_DIR = PROJECT_ROOT / "Resultat"
@@ -57,6 +59,60 @@ GHIDRA_SUPPORTED_FORMATS = [
     "Raw binary",
     "COFF and XCOFF",
 ]
+
+
+class SecurityScanDialog(QDialog):
+    """Dialog to select YARA rule and scan target."""
+
+    def __init__(self, parent=None, rule_path="", target_path=""):
+        super().__init__(parent)
+        self.setWindowTitle("Run Security Scan")
+
+        layout = QFormLayout(self)
+
+        # YARA rule selector
+        rule_layout = QHBoxLayout()
+        self.rule_edit = QLineEdit(rule_path)
+        rule_btn = QPushButton("Browse...")
+        rule_btn.clicked.connect(self.browse_rule)
+        rule_layout.addWidget(self.rule_edit)
+        rule_layout.addWidget(rule_btn)
+        layout.addRow("YARA Rule File:", rule_layout)
+
+        # Target selector (file or directory)
+        target_layout = QHBoxLayout()
+        self.target_edit = QLineEdit(target_path)
+        target_file_btn = QPushButton("File...")
+        target_file_btn.clicked.connect(self.browse_target_file)
+        target_dir_btn = QPushButton("Folder...")
+        target_dir_btn.clicked.connect(self.browse_target_dir)
+        target_layout.addWidget(self.target_edit)
+        target_layout.addWidget(target_file_btn)
+        target_layout.addWidget(target_dir_btn)
+        layout.addRow("Scan Target:", target_layout)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def browse_rule(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Select YARA Rule", "", "YARA Files (*.yar *.yara);;All Files (*)")
+        if path:
+            self.rule_edit.setText(path)
+
+    def browse_target_file(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Select Target File")
+        if path:
+            self.target_edit.setText(path)
+
+    def browse_target_dir(self):
+        path = QFileDialog.getExistingDirectory(self, "Select Target Directory")
+        if path:
+            self.target_edit.setText(path)
+
+    def get_paths(self):
+        return self.rule_edit.text().strip(), self.target_edit.text().strip()
 
 
 class MainWindow(QWidget):
@@ -132,6 +188,7 @@ class MainWindow(QWidget):
         # Connect signals to slots
         self.run_btn.clicked.connect(self.on_select_and_run_analysis)
         self.ghidra_btn.clicked.connect(self.on_select_and_run_ghidra)
+        self.security_scan_btn.clicked.connect(self.on_run_security_scan)
         self.analyze_batch_btn.clicked.connect(self.on_start_batch_analysis)
         self.pull_model_btn.clicked.connect(self.on_pull_model_clicked)
         self.prompt_selector_combo.currentIndexChanged.connect(self.on_prompt_selected)
@@ -162,16 +219,18 @@ class MainWindow(QWidget):
         self.run_btn = QPushButton("Analyze Single File...")
         self.analyze_batch_btn = QPushButton("Analyze Batch/Folder...")
         self.ghidra_btn = QPushButton("Analyze Binary with Ghidra...")
+        self.security_scan_btn = QPushButton("Run Security Scan...")
         analysis_group_layout = QGridLayout()
         analysis_group_layout.addWidget(analysis_label, 0, 0, 1, 2)
         analysis_group_layout.addWidget(self.run_btn, 1, 0)
         analysis_group_layout.addWidget(self.analyze_batch_btn, 1, 1)
         analysis_group_layout.addWidget(self.ghidra_btn, 2, 0, 1, 2)
+        analysis_group_layout.addWidget(self.security_scan_btn, 3, 0, 1, 2)
         self.batch_status_label = QLabel("Batch Status: Idle")
         self.batch_progress_bar = QProgressBar()
         self.batch_progress_bar.setVisible(False)
-        analysis_group_layout.addWidget(self.batch_status_label, 3,0)
-        analysis_group_layout.addWidget(self.batch_progress_bar, 3,1)
+        analysis_group_layout.addWidget(self.batch_status_label, 4,0)
+        analysis_group_layout.addWidget(self.batch_progress_bar, 4,1)
         
         ollama_model_group_layout = QGridLayout()
         ollama_model_group_layout.addWidget(QLabel("<b>2. Configure Model & Prompts:</b>"), 0, 0, 1, 2)
@@ -753,6 +812,8 @@ class MainWindow(QWidget):
         self.lite_basic_wireshark_checkbox.setChecked(lite_opts.get("basic_wireshark_tasks", False))
         self.is_lite_mode = self.settings.get("lite_mode_enabled", False)
         self.update_lite_mode_indicator()
+        self.yara_rule_path = self.settings.get("yara_rule_path", "")
+        self.yara_target_path = self.settings.get("yara_target_path", "")
 
     def save_settings_to_handler(self):
         """
@@ -795,6 +856,8 @@ class MainWindow(QWidget):
             "basic_wireshark_tasks": self.lite_basic_wireshark_checkbox.isChecked()
         }
         self.settings["lite_mode_enabled"] = self.is_lite_mode
+        self.settings["yara_rule_path"] = getattr(self, "yara_rule_path", "")
+        self.settings["yara_target_path"] = getattr(self, "yara_target_path", "")
 
         if not config_handler.save_settings(self.settings):
             QMessageBox.warning(self, "Save Settings Error", "Could not save settings to config.json.")
@@ -910,6 +973,28 @@ class MainWindow(QWidget):
         except Exception as e:
             self.append_console(f"Failed to save PDF: {e}")
             QMessageBox.warning(self, "Save Error", f"Could not save PDF:\n{e}")
+
+    def on_run_security_scan(self):
+        dlg = SecurityScanDialog(self, getattr(self, "yara_rule_path", ""), getattr(self, "yara_target_path", ""))
+        if dlg.exec() != QDialog.Accepted:
+            return
+        rule_path, target_path = dlg.get_paths()
+        if not rule_path or not target_path:
+            QMessageBox.warning(self, "Missing Paths", "Both rule and target must be specified.")
+            return
+        run_name = f"scan_{int(time.time())}"
+        try:
+            results = security_scanner.run_all_scans(run_name, rule_path, target_path)
+        except Exception as e:
+            self.append_console(f"Security scan failed: {e}")
+            QMessageBox.warning(self, "Scan Failed", str(e))
+            return
+        self.append_console(f"Security scan completed: {results}")
+        self.yara_rule_path = rule_path
+        self.yara_target_path = target_path
+        self.save_settings_to_handler()
+        summary = "\n".join(f"{k}: {v}" for k, v in results.items())
+        QMessageBox.information(self, "Security Scan Results", f"Reports generated:\n{summary}")
     
     def dragEnterEvent(self, event): 
         if event.mimeData().hasUrls():

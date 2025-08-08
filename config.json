@@ -6,6 +6,8 @@
     "guard_mode_folder": "",
     "guard_mode_enabled": false,
     "guard_mode_interval_minutes": 1,
+    "yara_rule_path": "",
+    "yara_target_path": "",
     "saved_prompts": [
         {
             "name": "HPROF Comprehensive Analysis",
@@ -76,5 +78,6 @@
         "reduce_llm_context": true,
         "basic_wireshark_tasks": true
     },
-    "lite_mode_enabled": false
+    "lite_mode_enabled": false,
+    "nmap_options": []
 }
