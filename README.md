@@ -5,6 +5,7 @@
 - Optional Guard Mode for automatically watching a folder
 - Live capture of network traffic using tshark
 - Manage optional tools via the built in tool manager
+- Binary analysis with Ghidra, using a bundled download or a user-selected system installation
 - Configurable prompt templates for LLM based analysis
 - System resource monitoring with psutil
 - Repeated metrics collection via `collect_metrics_periodically`
