@@ -10,6 +10,7 @@ except ImportError:  # pragma: no cover - handled by graceful fallback
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 RESULTAT_DIR = PROJECT_ROOT / "Resultat"
+METRICS_FILE_NAME = "system_metrics.jsonl"
 
 
 def collect_metrics(output_file: str | os.PathLike):
@@ -43,7 +44,7 @@ def collect_metrics(output_file: str | os.PathLike):
     else:
         metrics.update(
             {
-                "cpu_percent": psutil.cpu_percent(interval=1),
+                "cpu_percent": psutil.cpu_percent(interval=None),
                 "memory_percent": psutil.virtual_memory().percent,
                 "disk_percent": psutil.disk_usage("/").percent,
                 "net_bytes_sent": psutil.net_io_counters().bytes_sent,
@@ -56,12 +57,33 @@ def collect_metrics(output_file: str | os.PathLike):
     return metrics
 
 
-def collect_once_in_resultat(run_name: str):
-    """Convenience wrapper to collect metrics to a run subdirectory."""
+def run_metrics_path(run_name: str) -> Path:
+    """Return the metrics file path for a given run.
+
+    Parameters
+    ----------
+    run_name:
+        Name of the run directory inside ``Resultat``.
+    """
+
     run_dir = RESULTAT_DIR / run_name
-    os.makedirs(run_dir, exist_ok=True)
-    out_path = run_dir / "system_metrics.jsonl"
-    return collect_metrics(out_path)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    return run_dir / METRICS_FILE_NAME
+
+
+def collect_once_in_resultat(run_name: str):
+    """Collect metrics and append them to a run-specific file.
+
+    This convenience wrapper ensures metrics are written to a file under
+    ``Resultat/<run_name>/`` so that the dashboard can access them.
+    """
+
+    return collect_metrics(run_metrics_path(run_name))
+
+
+def collect_metrics_for_run(run_name: str):
+    """Alias of :func:`collect_once_in_resultat` for clearer naming."""
+    return collect_once_in_resultat(run_name)
 
 
 def collect_metrics_periodically(
@@ -87,9 +109,29 @@ def collect_metrics_periodically(
     """
 
     results = []
+
+    if psutil is not None:
+        # Warm up CPU percent to avoid a blocking first measurement
+        psutil.cpu_percent(interval=None)
+
     for i in range(iterations):
+        start = time.perf_counter()
         results.append(collect_metrics(output_file))
         if i < iterations - 1:
-            time.sleep(max(0.0, interval_seconds))
+            elapsed = time.perf_counter() - start
+            sleep_duration = max(0.0, interval_seconds - elapsed)
+            time.sleep(sleep_duration)
     return results
+
+
+def collect_metrics_periodically_for_run(
+    run_name: str,
+    iterations: int,
+    interval_seconds: float = 1.0,
+) -> list[dict]:
+    """Collect metrics repeatedly for a run-specific file."""
+
+    return collect_metrics_periodically(
+        run_metrics_path(run_name), iterations, interval_seconds
+    )
 

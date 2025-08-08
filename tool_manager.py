@@ -3,8 +3,11 @@ import os
 import sys
 import json
 import zipfile
+import shutil
 from pathlib import Path
 import requests
+from packaging import version
+
 
 from PySide6.QtCore import QObject, Signal, QThread, Qt
 from PySide6.QtWidgets import (
@@ -36,19 +39,21 @@ class DownloadWorker(QObject):
         try:
             self.save_path.parent.mkdir(parents=True, exist_ok=True)
             self.extract_path.mkdir(parents=True, exist_ok=True)
-            with requests.get(self.url, stream=True, allow_redirects=True, timeout=30) as r:
-                r.raise_for_status()
-                total_size = int(r.headers.get('content-length', 0))
-                downloaded_size = 0
-                with open(self.save_path, 'wb') as f:
-                    for chunk in r.iter_content(chunk_size=8192):
-                        if self.is_cancelled:
-                            self.error.emit("Download cancelled.")
-                            return
-                        f.write(chunk)
-                        downloaded_size += len(chunk)
-                        if total_size > 0:
-                            self.progress.emit(int((downloaded_size / total_size) * 100))
+            with requests.Session() as session:
+                session.headers.update({'User-Agent': 'Techbehandler'})
+                with session.get(self.url, stream=True, allow_redirects=True, timeout=30) as r:
+                    r.raise_for_status()
+                    total_size = int(r.headers.get('content-length', 0))
+                    downloaded_size = 0
+                    with open(self.save_path, 'wb') as f:
+                        for chunk in r.iter_content(chunk_size=8192):
+                            if self.is_cancelled:
+                                self.error.emit("Download cancelled.")
+                                return
+                            f.write(chunk)
+                            downloaded_size += len(chunk)
+                            if total_size > 0:
+                                self.progress.emit(int((downloaded_size / total_size) * 100))
             
             self.progress.emit(100)
             if self.is_cancelled:
@@ -74,11 +79,19 @@ class ToolManagerDialog(QDialog):
         self.setMinimumSize(600, 400)
         self.layout = QVBoxLayout(self)
         self.table = QTableWidget()
-        self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels(["Tool", "Version", "Platform", "Status", "Action"])
+        self.table.setColumnCount(6)
+        self.table.setHorizontalHeaderLabels([
+            "Tool",
+            "Version",
+            "Platform",
+            "Status",
+            "Action",
+            "Uninstall",
+        ])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
         self.layout.addWidget(self.table)
         self.download_thread, self.download_worker = None, None
         self.load_tools()
@@ -129,22 +142,70 @@ class ToolManagerDialog(QDialog):
             self.table.setItem(row_index, 1, QTableWidgetItem(tool.get("version")))
             self.table.setItem(row_index, 2, QTableWidgetItem(tool.get("platform")))
 
+            # Attempt to fetch remote metadata describing the latest release of the tool
+            update_url = tool.get("update_manifest_url")
+            latest_tool, remote_version = tool, None
+            if update_url:
+                try:
+                    response = requests.get(update_url, timeout=5)
+                    response.raise_for_status()
+                    remote_info = response.json() if response.content else {}
+                    if isinstance(remote_info, dict):
+                        latest_tool = {**tool, **remote_info}
+                        remote_version = remote_info.get("version")
+                except Exception:
+                    pass
+
+            # Ensure an install path exists for the data passed to the downloader
+            latest_tool.setdefault(
+                "install_path",
+                f"tools/{latest_tool.get('id')}-{latest_tool.get('version')}-{latest_tool.get('platform')}"
+            )
+
             install_dir = self._find_installed_tool_dir(tool)
             status_item = QTableWidgetItem()
             action_button = QPushButton()
+            uninstall_button = QPushButton("Uninstall")
+
+            update_available = (
+                install_dir is not None
+                and remote_version
+                and version.parse(remote_version) > version.parse(tool.get("version", "0"))
+            )
 
             if install_dir is not None:
-                status_item.setText("Installed")
-                status_item.setForeground(Qt.GlobalColor.darkGreen)
-                action_button.setText("Re-install")
+
+                if update_available:
+                    status_item.setText(f"Update available ({remote_version})")
+                    status_item.setForeground(Qt.GlobalColor.darkYellow)
+                    action_button.setText("Update")
+                else:
+                    status_item.setText("Installed")
+                    status_item.setForeground(Qt.GlobalColor.darkGreen)
+                    action_button.setText("Re-install")
+
             else:
                 status_item.setText("Not Installed")
                 status_item.setForeground(Qt.GlobalColor.red)
                 action_button.setText("Download & Install")
 
+                uninstall_button.setEnabled(False)
+
             self.table.setItem(row_index, 3, status_item)
             action_button.clicked.connect(lambda checked, t=tool, r=row_index: self.start_download(t, r))
+            uninstall_button.clicked.connect(lambda checked, t=tool, r=row_index: self.uninstall_tool(t, r))
+
+                if remote_version:
+                    # Display the newest version if it differs from the bundled one
+                    self.table.setItem(row_index, 1, QTableWidgetItem(remote_version))
+
+            self.table.setItem(row_index, 3, status_item)
+            action_button.clicked.connect(
+                lambda checked, t=latest_tool, r=row_index: self.start_download(t, r)
+            )
+
             self.table.setCellWidget(row_index, 4, action_button)
+            self.table.setCellWidget(row_index, 5, uninstall_button)
 
     def start_download(self, tool_info, row_index):
         """
@@ -168,6 +229,44 @@ class ToolManagerDialog(QDialog):
         
         self.download_thread.started.connect(self.download_worker.run)
         self.download_thread.start()
+
+    def uninstall_tool(self, tool_info, row_index):
+        """Deletes the tool's installation directory after user confirmation."""
+        install_path = self._find_installed_tool_dir(tool_info)
+        if not install_path or not install_path.exists():
+            QMessageBox.information(self, "Uninstall", f"{tool_info.get('name')} is not installed.")
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Confirm Uninstall",
+            f"Are you sure you want to uninstall {tool_info.get('name')}?",
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        try:
+            shutil.rmtree(install_path)
+        except PermissionError:
+            QMessageBox.warning(
+                self,
+                "Permission Error",
+                f"Permission denied while uninstalling {tool_info.get('name')}.",
+            )
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "Uninstall Error",
+                f"Failed to uninstall {tool_info.get('name')}: {e}",
+            )
+        else:
+            QMessageBox.information(
+                self,
+                "Uninstall",
+                f"{tool_info.get('name')} has been uninstalled.",
+            )
+        finally:
+            self.load_tools()
 
     def on_download_error(self, error_msg):
         QMessageBox.critical(self, "Download Error", error_msg)

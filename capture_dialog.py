@@ -1,3 +1,4 @@
+
 # Filename: capture_dialog.py
 import os
 import time
@@ -10,6 +11,11 @@ from pyshark.tshark.tshark import get_tshark_interfaces
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 import threading
+import os
+import sys
+import time
+
+
 
 from PySide6.QtCore import QObject, Signal, QThread
 from PySide6.QtWidgets import (
@@ -46,6 +52,7 @@ class CaptureWorker(QObject):
         self.is_cancelled = False
 
     def run(self):
+
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
@@ -81,34 +88,46 @@ class CaptureWorker(QObject):
             self.progress.emit(f"Starting capture on '{self.interface}' for {self.duration} seconds...")
             os.makedirs(os.path.dirname(self.output_file), exist_ok=True)
 
+
             capture = pyshark.LiveCapture(
                 interface=self.interface,
                 tshark_path=self.tshark_path,
                 custom_parameters=['-w', self.output_file]
             )
 
-            capture.sniff(timeout=self.duration)  # ✅ THE CRITICAL MISSING LINE
-            capture.close()
+            elapsed = 0
+            chunk_seconds = 1
+            while elapsed < self.duration:
+                remaining = min(chunk_seconds, self.duration - elapsed)
+                capture.sniff(timeout=remaining)
+                elapsed += remaining
+                self.countdown.emit(self.duration - elapsed)
+                if self.is_cancelled:
+                    capture.close()
+                    if os.path.exists(self.output_file):
+                        try:
+                            os.remove(self.output_file)
+                        except OSError as e:
+                            self.progress.emit(f"Could not delete partial capture file: {e}")
+                    self.error.emit("Capture was cancelled.")
+                    return
 
-            if self.is_cancelled:
-                if os.path.exists(self.output_file):
-                    try:
-                        os.remove(self.output_file)
-                    except OSError as e:
-                        self.progress.emit(f"Could not delete partial capture file: {e}")
-                self.error.emit("Capture was cancelled.")
-                return
+            capture.close()
 
             self.countdown.emit(0)
             self.progress.emit("Finalizing capture file...")
 
             timeout_seconds = 10
+            poll_interval = 0.2
+            elapsed_time = 0
             file_ready = False
 
-            if os.path.exists(self.output_file) and os.path.getsize(self.output_file) > 100:
-                file_ready = True
-            else:
-                file_ready = file_ready_event.wait(timeout_seconds)
+            while elapsed_time < timeout_seconds:
+                if os.path.exists(self.output_file) and os.path.getsize(self.output_file) > 100:
+                    file_ready = True
+                    break
+                time.sleep(poll_interval)
+                elapsed_time += poll_interval
 
             if file_ready:
                 self.finished.emit(f"Capture complete. File saved to:\n{self.output_file}")
@@ -120,9 +139,8 @@ class CaptureWorker(QObject):
         except Exception as e:
             self.error.emit(f"An error occurred during capture:\n{e}")
         finally:
-            observer.stop()
-            observer.join()
             loop.close()
+
 
 
 class LiveCaptureDialog(QDialog):

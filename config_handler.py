@@ -11,6 +11,7 @@ CONFIG_FILE_PATH = PROJECT_ROOT / "config.json"
 DEFAULT_SETTINGS = {
     "default_ollama_model": "gemma3:1b", "ollama_dashboard_port": 5000, "webboard_port": 5001, "mat_memory_mb": 4096,
     "guard_mode_folder": "", "guard_mode_enabled": False, "guard_mode_interval_minutes": 1,
+    "yara_rule_path": "", "yara_target_path": "",
     "saved_prompts": [
         {"name": "HPROF Comprehensive Analysis", "template": """You are an expert Java performance analyst.
 Analyze the following diagnostic information from a Java application's heap dump.
@@ -92,7 +93,12 @@ Your response:
         "reduce_llm_context": True,
         "basic_wireshark_tasks": True
     },
-    "lite_mode_enabled": False
+    "lite_mode_enabled": False,
+
+    "dashboard_api_token": ""
+
+    "nmap_options": []
+
 }
 
 def load_settings():
