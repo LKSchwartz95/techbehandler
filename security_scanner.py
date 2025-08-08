@@ -1,7 +1,11 @@
 import os
 import subprocess
 from pathlib import Path
+
+import logging
+
 import sys
+
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -81,18 +85,32 @@ def run_yara_scan(rule_file: str | os.PathLike, target: str | os.PathLike, run_d
     return str(output_file)
 
 
+
 def run_all_scans(
     run_name: str,
     yara_rule: str | os.PathLike | None = None,
     yara_target: str | os.PathLike | None = None,
 ):
+
+
     run_name = sanitize_run_name(run_name)
+
     run_dir = RESULTAT_DIR / run_name
     os.makedirs(run_dir, exist_ok=True)
     results = {
         "lynis": run_lynis_scan(run_dir),
         "osquery": run_osquery_scan(run_dir),
+        "yara": None,
     }
     if yara_rule and yara_target:
-        results["yara"] = run_yara_scan(yara_rule, yara_target, run_dir)
+        rule_path = Path(yara_rule)
+        target_path = Path(yara_target)
+        if rule_path.is_file() and target_path.exists():
+            results["yara"] = run_yara_scan(rule_path, target_path, run_dir)
+        else:
+            logger.error(
+                "Invalid YARA configuration: rule '%s' or target '%s' not found",
+                yara_rule,
+                yara_target,
+            )
     return results
