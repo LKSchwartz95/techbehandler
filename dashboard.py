@@ -18,8 +18,10 @@ import json
 import shutil 
 import requests
 from pathlib import Path
+import threading
+import time
 
-import ollama_client 
+import ollama_client
 
 app = Flask(__name__)
 app.secret_key = os.getenv("DASHBOARD_SECRET_KEY", "change_me")
@@ -37,6 +39,18 @@ RESULTAT_DIR_DASHBOARD = os.path.join(os.getcwd(), "Resultat")
 DASHBOARD_LOG_FILE = os.path.join(os.getcwd(), "dashboard_log.txt")
 app.config["TOKEN_AUTH"] = False
 app.config["READ_ONLY_MODE"] = False
+
+capture_thread = None
+capture_stop_event = threading.Event()
+capture_state = {
+    "status": "idle",
+    "message": "Idle",
+    "run_name": None,
+    "output_file": None,
+    "duration": 0,
+    "start_time": 0,
+}
+capture_obj = None
 
 
 @app.before_request
@@ -147,7 +161,7 @@ def index():
     return render_template("index.html", runs_with_status=runs_with_status)
 
 
-@app.route("/api/runs") 
+@app.route("/api/runs")
 def get_runs_api():
     ensure_resultat_dir(); runs_with_status = []
     try:
@@ -167,6 +181,96 @@ def get_runs_api():
             runs_with_status.append({"name": run_name, "user_status": status, "tags": tags})
     except Exception as e: log_dashboard_error(f"API Err read Resultat: {e}"); return jsonify({"error": str(e)}), 500
     return jsonify(runs_with_status)
+
+
+def _capture_worker(interface, duration):
+    """Background worker that performs packet capture using pyshark."""
+    global capture_obj, capture_thread, capture_state
+    import pyshark  # Imported lazily to avoid import overhead when unused
+    ensure_resultat_dir()
+    run_name = f"capture_{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+    run_dir = os.path.join(RESULTAT_DIR_DASHBOARD, run_name)
+    os.makedirs(run_dir, exist_ok=True)
+    output_file = os.path.join(run_dir, "capture.pcapng")
+    capture_state.update({
+        "status": "running",
+        "message": "Capture in progress",
+        "run_name": run_name,
+        "output_file": output_file,
+        "duration": duration,
+        "start_time": time.time(),
+    })
+    try:
+        capture_obj = pyshark.LiveCapture(
+            interface=interface,
+            custom_parameters=['-w', output_file]
+        )
+        capture_obj.sniff(timeout=duration)
+        capture_obj.close()
+        if capture_stop_event.is_set():
+            capture_state.update({"status": "stopped", "message": "Capture stopped"})
+            if os.path.exists(output_file):
+                try:
+                    os.remove(output_file)
+                except OSError:
+                    pass
+        else:
+            capture_state.update({"status": "finished", "message": f"Capture saved to {output_file}"})
+    except Exception as e:  # pragma: no cover - capture errors not under test
+        capture_state.update({"status": "error", "message": str(e)})
+    finally:
+        capture_obj = None
+        capture_stop_event.clear()
+        capture_thread = None
+
+
+@app.route("/api/capture", methods=["GET", "POST"])
+def api_capture():
+    """API endpoint to control live packet captures."""
+    global capture_thread, capture_obj
+    if request.method == "POST":
+        if app.config.get("READ_ONLY_MODE"):
+            return jsonify({"status": "error", "message": "Read-only mode"}), 405
+        data = request.get_json() or {}
+        action = data.get("action")
+        if action == "start":
+            if capture_thread and capture_thread.is_alive():
+                return jsonify({"status": "error", "message": "Capture already running"}), 400
+            interface = data.get("interface", "any")
+            duration = int(data.get("duration", 30))
+            capture_stop_event.clear()
+            capture_thread = threading.Thread(
+                target=_capture_worker,
+                args=(interface, duration),
+                daemon=True,
+            )
+            capture_thread.start()
+            return jsonify({"status": "started"})
+        elif action == "stop":
+            if capture_thread and capture_thread.is_alive():
+                capture_stop_event.set()
+                if capture_obj:
+                    try:
+                        capture_obj.close()
+                    except Exception:
+                        pass
+                return jsonify({"status": "stopping"})
+            return jsonify({"status": "error", "message": "No capture running"}), 400
+        return jsonify({"status": "error", "message": "Invalid action"}), 400
+
+    # GET: return capture status
+    state = capture_state.copy()
+    if state.get("status") == "running":
+        elapsed = time.time() - state.get("start_time", 0)
+        remaining = max(0, int(state.get("duration", 0) - elapsed))
+        state["remaining"] = remaining
+    return jsonify(state)
+
+
+@app.route("/capture")
+def capture_page():
+    """Serve simple page to control live packet captures."""
+    return render_template("capture.html")
 
 def _load_run_data_common(run_dir_path, run_name_for_log):
     data = {
