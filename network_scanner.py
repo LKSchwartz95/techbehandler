@@ -1,15 +1,25 @@
 import os
 import subprocess
 from pathlib import Path
+import sys
+from typing import List, Optional
+import config_handler
+
 
 PROJECT_ROOT = Path(__file__).resolve().parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.append(str(PROJECT_ROOT))
+from utils import sanitize_run_name
 RESULTAT_DIR = PROJECT_ROOT / "Resultat"
 
 
-def run_nmap_scan(target: str, run_dir: Path) -> str:
+def run_nmap_scan(target: str, run_dir: Path, extra_options: Optional[List[str]] = None) -> str:
     """Run an nmap scan if nmap is available."""
     output_file = run_dir / f"nmap_{target.replace('/', '_')}.txt"
-    cmd = ["nmap", "-A", target]
+    cmd = ["nmap", "-A"]
+    if extra_options:
+        cmd.extend(extra_options)
+    cmd.append(target)
     try:
         with open(output_file, "w", encoding="utf-8") as f:
             subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT, check=False)
@@ -20,6 +30,29 @@ def run_nmap_scan(target: str, run_dir: Path) -> str:
 
 
 def scan_target(target: str, run_name: str):
+    run_name = sanitize_run_name(run_name)
     run_dir = RESULTAT_DIR / run_name
     os.makedirs(run_dir, exist_ok=True)
-    return run_nmap_scan(target, run_dir)
+    settings = config_handler.load_settings()
+    extra_opts = settings.get("nmap_options", [])
+    return run_nmap_scan(target, run_dir, extra_opts)
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run an Nmap scan and save the output.")
+    parser.add_argument("target", help="Target to scan")
+    parser.add_argument("--run-name", default="run", help="Output directory name")
+    parser.add_argument(
+        "--options",
+        nargs="*",
+        help="Extra options for nmap (overrides config file)",
+    )
+    args = parser.parse_args()
+
+    opts = args.options if args.options is not None else config_handler.load_settings().get("nmap_options", [])
+    run_dir = RESULTAT_DIR / args.run_name
+    os.makedirs(run_dir, exist_ok=True)
+    output_path = run_nmap_scan(args.target, run_dir, opts)
+    print(output_path)
