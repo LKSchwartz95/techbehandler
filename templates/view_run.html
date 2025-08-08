@@ -207,6 +207,40 @@
                         </div>
                     </div>
 
+                    {% if mat_toc_entries %}
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseMatToc" aria-expanded="false" aria-controls="collapseMatToc">
+                                <i class="bi bi-list-ul me-2"></i>MAT Table of Contents
+                            </button>
+                        </h2>
+                        <div id="collapseMatToc" class="accordion-collapse collapse" data-bs-parent="#detailsAccordion">
+                            <div class="list-group list-group-flush">
+                                {% for entry in mat_toc_entries %}
+                                <a href="{{ entry.url }}" target="_blank" class="list-group-item list-group-item-action">{{ entry.text }}</a>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if mat_index_files %}
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseMatIndexes" aria-expanded="false" aria-controls="collapseMatIndexes">
+                                <i class="bi bi-journal-text me-2"></i>MAT Index Files
+                            </button>
+                        </h2>
+                        <div id="collapseMatIndexes" class="accordion-collapse collapse" data-bs-parent="#detailsAccordion">
+                            <div class="list-group list-group-flush">
+                                {% for entry in mat_index_files %}
+                                <a href="{{ entry.url }}" target="_blank" class="list-group-item list-group-item-action">{{ entry.text }}</a>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
                     <!-- Files Accordion Item -->
                     <div class="accordion-item">
                         <h2 class="accordion-header">

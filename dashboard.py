@@ -258,6 +258,9 @@ def view_run(run):
 
     mat_idx_link_txt = "MAT Report (Not Found)"
     mat_toc_link_txt = "MAT TOC (Not Found)"
+    mat_toc_entries = []
+    toc_relpaths = set()
+    mat_extra_index_entries = []
     
     if mat_report_entry_file:
         mat_report_full_path = os.path.join(run_dir_path, mat_report_entry_file)
@@ -266,6 +269,42 @@ def view_run(run):
         mat_toc_path = os.path.join(os.path.dirname(mat_report_full_path), "toc.html")
         if os.path.isfile(mat_toc_path):
             mat_toc_link_txt = "MAT Table of Contents"
+            try:
+                with open(mat_toc_path, "r", encoding="utf-8", errors="ignore") as f_toc:
+                    toc_soup = BeautifulSoup(f_toc.read(), "lxml")
+                for a in toc_soup.find_all("a", href=True):
+                    href = a["href"]
+                    text = a.get_text(strip=True) or href
+                    if href.startswith(("#", "javascript:")):
+                        continue
+                    asset_path_from_toc = Path(os.path.dirname(mat_report_entry_file)) / href
+                    clean_fn = os.path.normpath(asset_path_from_toc).replace("\\", "/")
+                    if clean_fn.startswith("../"):
+                        continue
+                    mat_toc_entries.append({
+                        "text": text,
+                        "url": url_for("get_file_from_run", run=run, filename=clean_fn)
+                    })
+                    toc_relpaths.add(clean_fn)
+            except Exception as e:
+                log_dashboard_error(f"Err parsing MAT TOC for {run}: {e}")
+
+        # Gather additional MAT index files not referenced in toc.html
+        try:
+            mat_root = os.path.dirname(mat_report_entry_file)
+            for root_dir, _, files in os.walk(os.path.join(run_dir_path, mat_root)):
+                for fname in files:
+                    lower = fname.lower()
+                    if lower.startswith("index") and lower.endswith((".html", ".htm")):
+                        rel_path = os.path.relpath(os.path.join(root_dir, fname), run_dir_path).replace("\\", "/")
+                        if (rel_path == mat_report_entry_file or rel_path.endswith("toc.html") or rel_path in toc_relpaths):
+                            continue
+                        mat_extra_index_entries.append({
+                            "text": rel_path,
+                            "url": url_for("get_file_from_run", run=run, filename=rel_path)
+                        })
+        except Exception as e:
+            log_dashboard_error(f"Err listing MAT index files for {run}: {e}")
 
         try:
             with open(mat_report_full_path, "r", encoding="utf-8", errors="ignore") as f_mat_idx:
@@ -340,9 +379,11 @@ def view_run(run):
         mat_overview_pie_chart_url=mat_pie_src, 
         mat_report_index_link_text=mat_idx_link_txt,
         mat_report_toc_link_text=mat_toc_link_txt,
-        mat_report_entry_file=mat_report_entry_file, 
+        mat_report_entry_file=mat_report_entry_file,
+        mat_toc_entries=mat_toc_entries,
+        mat_index_files=mat_extra_index_entries,
         other_run_files=other_files,
-        mat_report_type_used=run_info.get("mat_report_type"), 
+        mat_report_type_used=run_info.get("mat_report_type"),
         user_status=run_info.get("user_status"),
         llm_tags=run_info.get("llm_generated_tags", []),
         llm_params_json=run_info.get("llm_params_json", "{}"),
