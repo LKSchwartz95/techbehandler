@@ -88,6 +88,21 @@ Run the automated tests with [pytest](https://docs.pytest.org/):
 pytest
 ```
 
+## Remediation Plugins
+
+`remediation_engine` can be extended with additional tag-to-remediation
+suggestions by placing Python modules inside the `remediation_plugins`
+directory. Each plugin should define a `TAG_TO_REMEDIATION` dictionary that
+maps tag names to suggestion strings. All plugin mappings are merged with the
+built-in defaults at runtime.
+
+```python
+# remediation_plugins/custom.py
+TAG_TO_REMEDIATION = {
+    "CustomTag": "Custom remediation instructions."
+}
+```
+
 ## Security & Operational Guide
 
 The application analyses potentially untrusted artifacts. The following steps

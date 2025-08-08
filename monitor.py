@@ -7,6 +7,8 @@ import re
 import zipfile
 import shutil
 import time
+import tempfile
+from io import StringIO
 from datetime import datetime, timezone
 import argparse
 import json
@@ -145,23 +147,52 @@ def run_tshark_task(pcap_path, tshark_exe_path, task_id):
     full_cmd = base_cmd + task["cmd"]
     
     print(f"Running tshark task '{task['title']}': {' '.join(full_cmd)}")
-    
+
+    tmp_path = None
     try:
-        process = subprocess.run(full_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", check=True, timeout=120)
-        return f"--- {task['title']} ---\n{process.stdout}\n"
-    except subprocess.TimeoutExpired as e:
-        error_output = f"--- {task['title']} (TIMED OUT) ---\n"
-        error_output += f"tshark task timed out after 120 seconds.\n"
-        log_monitor_error(error_output)
-        return error_output
-    except subprocess.CalledProcessError as e:
-        error_output = f"--- {task['title']} (FAILED) ---\n"
-        error_output += f"tshark failed with exit code {e.returncode}.\nStderr: {e.stderr}\n"
-        log_monitor_error(error_output)
-        return error_output
+        with tempfile.NamedTemporaryFile(delete=False, mode="w+", encoding="utf-8") as tmp_file:
+            tmp_path = tmp_file.name
+            process = subprocess.Popen(
+                full_cmd,
+                stdout=tmp_file,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+
+        try:
+            _, stderr_data = process.communicate(timeout=120)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            _, stderr_data = process.communicate()
+            error_output = f"--- {task['title']} (TIMED OUT) ---\n"
+            error_output += "tshark task timed out after 120 seconds.\n"
+            log_monitor_error(error_output)
+            return error_output
+
+        if process.returncode != 0:
+            error_output = f"--- {task['title']} (FAILED) ---\n"
+            error_output += f"tshark failed with exit code {process.returncode}.\nStderr: {stderr_data}\n"
+            log_monitor_error(error_output)
+            return error_output
+
+        buffer = StringIO()
+        with open(tmp_path, "r", encoding="utf-8", errors="replace") as out_file:
+            for line in out_file:
+                buffer.write(line)
+        return f"--- {task['title']} ---\n{buffer.getvalue()}\n"
     except FileNotFoundError:
-        log_monitor_error(f"tshark command failed. Is tshark installed and in the PATH or specified correctly?")
+        log_monitor_error(
+            f"tshark command failed. Is tshark installed and in the PATH or specified correctly?"
+        )
         raise
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
 
 def ask_ollama_model(prompt, model_tag, ollama_cmd_path_ignored, llm_params_dict, timeout=300):
     print(f"Contacting Ollama API via client with model '{model_tag}'...", flush=True)
