@@ -9,10 +9,11 @@ import shutil
 import time
 from datetime import datetime, timezone
 import argparse
-import json 
-import traceback 
-import ollama_client 
+import json
+import traceback
+import ollama_client
 from bs4 import BeautifulSoup
+import ghidra_analyzer
 
 PROJECT_ROOT_MONITOR = os.path.dirname(os.path.abspath(__file__))
 # RESULTAT_DIR_MONITOR is no longer the authority, run_dir passed by arg is.
@@ -188,10 +189,26 @@ def main(argv_to_parse=None):
     parser.add_argument("--mat-launcher-path", help="Path to the MAT launcher JAR (HPROF only).")
     parser.add_argument("--tshark-path", help="Path to tshark executable (pcap only).")
     parser.add_argument("--pcap-tasks", help="Comma-separated list of tshark tasks to run (pcap only).")
+    parser.add_argument("--analysis-type", choices=["hprof", "threaddump", "pcap", "ghidra"], help="Explicit analysis type.")
+    parser.add_argument("--ghidra-headless-path", help="Path to Ghidra analyzeHeadless script (ghidra only).")
     args = parser.parse_args(argv_to_parse)
 
     input_file_lower = args.input_file.lower()
-    is_hprof, is_txt, is_pcap = input_file_lower.endswith('.hprof'), input_file_lower.endswith('.txt'), input_file_lower.endswith(('.pcap', '.pcapng'))
+    if args.analysis_type:
+        analysis_type = args.analysis_type
+    elif input_file_lower.endswith('.hprof'):
+        analysis_type = 'hprof'
+    elif input_file_lower.endswith('.txt'):
+        analysis_type = 'threaddump'
+    elif input_file_lower.endswith(('.pcap', '.pcapng')):
+        analysis_type = 'pcap'
+    else:
+        analysis_type = 'unknown'
+
+    is_hprof = analysis_type == 'hprof'
+    is_txt = analysis_type == 'threaddump'
+    is_pcap = analysis_type == 'pcap'
+    is_ghidra = analysis_type == 'ghidra'
     
     # The run directory is now passed as an argument
     run_dir = args.run_dir
@@ -199,6 +216,7 @@ def main(argv_to_parse=None):
 
     if is_hprof and not args.mat_launcher_path: print("ERROR: --mat-launcher-path is required for .hprof analysis.", file=sys.stderr); sys.exit(1)
     if is_pcap and not args.tshark_path: print("ERROR: --tshark-path is required for pcap analysis.", file=sys.stderr); sys.exit(1)
+    if is_ghidra and not args.ghidra_headless_path: print("ERROR: --ghidra-headless-path is required for ghidra analysis.", file=sys.stderr); sys.exit(1)
 
     try: llm_parameters = json.loads(args.llm_params)
     except (json.JSONDecodeError, ValueError) as e: print(f"ERROR: Invalid JSON for --llm-params: {e}", flush=True); llm_parameters = {}
@@ -212,7 +230,7 @@ def main(argv_to_parse=None):
     
     metadata = { 
         "input_file": os.path.basename(args.input_file),
-        "analysis_type": "hprof" if is_hprof else "threaddump" if is_txt else "pcap" if is_pcap else "unknown",
+        "analysis_type": analysis_type,
         "analysis_timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "model_used": args.model, "ollama_executable_used": args.ollama_cmd, 
         "mat_memory_mb_used": args.mat_memory if is_hprof else "N/A", 
@@ -223,7 +241,7 @@ def main(argv_to_parse=None):
     }
     save_run_metadata(run_dir, metadata)
 
-    mat_summary, thread_dump, tshark_summary, md_content_header = "N/A", "N/A", "N/A", ""
+    mat_summary, thread_dump, tshark_summary, ghidra_summary, md_content_header = "N/A", "N/A", "N/A", "N/A", ""
 
     if is_hprof:
         print("--- Starting HPROF Analysis ---")
@@ -267,11 +285,19 @@ def main(argv_to_parse=None):
             md_content_header = f"### tshark Analysis Output:\n```text\n{tshark_summary or 'Not available.'}\n```\n\n"
         except Exception as e:
             print(f"tshark analysis failed: {e}", flush=True); metadata["status"] = "failed_tshark"; save_run_metadata(run_dir, metadata); sys.exit(1)
+    elif is_ghidra:
+        print("--- Starting Ghidra Analysis ---")
+        try:
+            ghidra_summary = ghidra_analyzer.run_ghidra_analysis(args.input_file, args.ghidra_headless_path, run_dir)
+            md_content_header = f"### Ghidra Summary:\n```text\n{ghidra_summary or 'Not available.'}\n```\n\n"
+        except Exception as e:
+            print(f"Ghidra analysis failed: {e}", flush=True); metadata["status"] = "failed_ghidra"; save_run_metadata(run_dir, metadata); sys.exit(1)
 
     prompt_txt = (args.prompt or "Default prompt...").format(
         thread_dump_details=thread_dump or "Not available.",
         mat_summary=mat_summary or "Not available.",
-        tshark_summary=tshark_summary or "Not available."
+        tshark_summary=tshark_summary or "Not available.",
+        ghidra_summary=ghidra_summary or "Not available."
     )
     
     llm_result = ask_ollama_model(prompt_txt, args.model, args.ollama_cmd, llm_parameters) 

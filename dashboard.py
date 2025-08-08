@@ -147,8 +147,8 @@ def get_runs_api():
     return jsonify(runs_with_status)
 
 def _load_run_data_common(run_dir_path, run_name_for_log):
-    data = { "name": run_name_for_log, "model_used": OLLAMA_MODEL_DISPLAY_FALLBACK, "timestamp": "N/A", 
-        "hprof_source": "N/A", "mat_memory_setting": "N/A", "mat_report_type": "N/A", 
+    data = { "name": run_name_for_log, "model_used": OLLAMA_MODEL_DISPLAY_FALLBACK, "timestamp": "N/A",
+        "analysis_type": "unknown", "hprof_source": "N/A", "mat_memory_setting": "N/A", "mat_report_type": "N/A",
         "llm_analysis_html": "<p><em>Analysis N/A</em></p>", "metadata_error": None, "md_error": None, 
         "raw_md_snippet_on_load": "N/A", "md_filename_processed": None, "user_status": USER_STATUS_PENDING,
         "raw_llm_analysis_text": None, "raw_diagnostic_text": None,
@@ -166,6 +166,7 @@ def _load_run_data_common(run_dir_path, run_name_for_log):
                  try: data["timestamp"] = datetime.fromisoformat(ts_iso.replace("Z", "+00:00")).strftime("%Y-%m-%d %H:%M:%S UTC")
                  except ValueError: data["timestamp"] = ts_iso 
             data["hprof_source"] = metadata.get("input_file", "N/A")
+            data["analysis_type"] = metadata.get("analysis_type", "unknown")
             data["mat_memory_setting"] = metadata.get("mat_memory_mb_used", "N/A") 
             data["mat_report_type"] = metadata.get("mat_report_arg_used", "N/A")
             data["user_status"] = metadata.get("user_status", USER_STATUS_PENDING)
