@@ -236,6 +236,28 @@ def _load_run_data_common(run_dir_path, run_name_for_log):
                     data["raw_diagnostic_text"] = f_trace.read().strip()
         except Exception as e_trace:
             log_dashboard_error(f"Fallback: Error reading diagnostic file for {run_name_for_log}: {e_trace}")
+    # Provide a small preview of packet capture data for pcap analyses
+    if data["analysis_type"] == "pcap":
+        try:
+            pcap_fn = next((f for f in os.listdir(run_dir_path) if f.lower().endswith((".pcap", ".pcapng"))), None)
+            if pcap_fn:
+                sample_path = os.path.join(run_dir_path, pcap_fn)
+                with open(sample_path, "rb") as f_pcap:
+                    sample_bytes = f_pcap.read(256)
+
+                def _hexdump(buf: bytes, width: int = 16) -> str:
+                    lines = []
+                    for i in range(0, len(buf), width):
+                        chunk = buf[i:i+width]
+                        hex_part = " ".join(f"{b:02x}" for b in chunk)
+                        ascii_part = "".join(chr(b) if 32 <= b < 127 else "." for b in chunk)
+                        lines.append(f"{i:08x}  {hex_part:<{width*3}} {ascii_part}")
+                    return "\n".join(lines)
+
+                data["pcap_sample"] = _hexdump(sample_bytes)
+        except Exception as e_pcap:
+            log_dashboard_error(f"Error extracting pcap preview for {run_name_for_log}: {e_pcap}")
+
     return data
 
 
@@ -343,20 +365,27 @@ def view_run(run):
             
     other_files = []
     try:
-        all_files_in_dir = os.listdir(run_dir_path)
         md_name_only = os.path.basename(run_info["md_filename_processed"]) if run_info.get("md_filename_processed") else ""
-        
+
         # General exclusion list
         excluded_files = {"run_metadata.json", md_name_only}
         if mat_report_entry_file:
-            excluded_files.add(os.path.basename(mat_report_entry_file))
-            # Also exclude the toc.html that belongs to the main report
-            if os.path.isfile(os.path.join(os.path.dirname(os.path.join(run_dir_path, mat_report_entry_file)), "toc.html")):
-                 excluded_files.add("toc.html")
-        
-        other_files = sorted(f for f in all_files_in_dir if f.lower().endswith((".zip",".log",".txt",".threads",".md", ".pcapng", ".html")) and f not in excluded_files)
+            excluded_files.add(mat_report_entry_file)
+            toc_candidate = os.path.join(os.path.dirname(mat_report_entry_file), "toc.html").replace("\\", "/")
+            excluded_files.add(toc_candidate)
 
-    except Exception as e: log_dashboard_error(f"Err listing files for {run}: {e}"); traceback.print_exc(file=sys.stderr)
+        for root_dir, _, files in os.walk(run_dir_path):
+            for f in files:
+                rel_path = os.path.relpath(os.path.join(root_dir, f), run_dir_path).replace("\\", "/")
+                if rel_path in excluded_files or f in excluded_files:
+                    continue
+                other_files.append(rel_path)
+
+        other_files = sorted(other_files)
+
+    except Exception as e:
+        log_dashboard_error(f"Err listing files for {run}: {e}")
+        traceback.print_exc(file=sys.stderr)
 
     config_data = get_config()
     prompts_for_template = config_data.get("saved_prompts", [])
@@ -375,11 +404,12 @@ def view_run(run):
         hprof_source=run_info.get("hprof_source"),
         run_time=run_info.get("timestamp"), 
         mat_memory_setting=run_info.get("mat_memory_setting"),
-        model_used=run_info.get("model_used"), 
-        llm_analysis_html=run_info.get("llm_analysis_html"), 
+        model_used=run_info.get("model_used"),
+        llm_analysis_html=run_info.get("llm_analysis_html"),
         thread_dump_details=run_info.get("raw_diagnostic_text", "N/A"),
+        pcap_sample=run_info.get("pcap_sample"),
         mat_problem_suspect_html=mat_suspect_html,
-        mat_overview_pie_chart_url=mat_pie_src, 
+        mat_overview_pie_chart_url=mat_pie_src,
         mat_report_index_link_text=mat_idx_link_txt,
         mat_report_toc_link_text=mat_toc_link_txt,
         mat_report_entry_file=mat_report_entry_file,
