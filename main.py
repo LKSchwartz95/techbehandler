@@ -15,10 +15,27 @@ os.makedirs(os.path.join(PROJECT_ROOT, "Resultat"), exist_ok=True)
 def run_gui_app():
     print(f"Attempting to launch GUI. PROJECT_ROOT={PROJECT_ROOT}, CWD={os.getcwd()}")
     from PySide6.QtWidgets import QApplication
-    try: from gui import MainWindow 
-    except ImportError as e: print(f"ERROR: Import gui.MainWindow fail: {e}", file=sys.stderr); sys.exit(1)
-    app = QApplication(sys.argv); app.setApplicationName("DumpBehandler")
-    window = MainWindow(); window.show(); sys.exit(app.exec())
+    from PySide6.QtCore import QtMsgType, qInstallMessageHandler
+
+    def _qt_message_handler(msg_type, context, message):
+        """Filter out noisy QPainter warnings."""
+        if msg_type == QtMsgType.QtWarningMsg and message.startswith("QPainter::"):
+            return
+        print(message, file=sys.stderr)
+
+    qInstallMessageHandler(_qt_message_handler)
+
+    try:
+        from gui import MainWindow
+    except ImportError as e:
+        print(f"ERROR: Import gui.MainWindow fail: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    app = QApplication(sys.argv)
+    app.setApplicationName("DumpBehandler")
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec())
 
 def run_monitor_app(monitor_cli_args):
     print(f"Attempting to run monitor. Args: {monitor_cli_args}. CWD={os.getcwd()}")
