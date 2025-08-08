@@ -116,6 +116,7 @@ def get_llm_parameters_from_config():
 
     return params_to_return
 
+
 def ensure_resultat_dir():
     if not os.path.isdir(RESULTAT_DIR_DASHBOARD):
         try: os.makedirs(RESULTAT_DIR_DASHBOARD)
@@ -139,50 +140,50 @@ def log_dashboard_error(message):
             if exc_type is not None: f.write(traceback.format_exc() + "\n")
     except Exception as e: print(f"CRIT_DASHBOARD_LOG_FAIL: {e}", file=sys.stderr, flush=True)
 
-@app.route("/")
-def index(): 
-    ensure_resultat_dir(); runs_with_status = []
-    try:
-        # Sort directories by modification time, newest first
-        dirs = [d for d in os.listdir(RESULTAT_DIR_DASHBOARD) if os.path.isdir(os.path.join(RESULTAT_DIR_DASHBOARD, d))]
-        run_names = sorted(dirs, key=lambda d: os.path.getmtime(os.path.join(RESULTAT_DIR_DASHBOARD, d)), reverse=True)
 
-        for run_name in run_names:
-            status = USER_STATUS_PENDING; tags = []
-            metadata_path = os.path.join(RESULTAT_DIR_DASHBOARD, run_name, "run_metadata.json")
+def list_runs_with_status():
+    """Yield basic information for each run in the Resultat directory."""
+    ensure_resultat_dir()
+    try:
+        with os.scandir(RESULTAT_DIR_DASHBOARD) as it:
+            run_dirs = [entry for entry in it if entry.is_dir()]
+
+        for entry in sorted(run_dirs, key=lambda e: e.stat().st_mtime, reverse=True):
+            status = USER_STATUS_PENDING
+            tags = []
+            metadata_path = os.path.join(entry.path, "run_metadata.json")
             if os.path.isfile(metadata_path):
                 try:
-                    with open(metadata_path, "r", encoding="utf-8") as f_meta: metadata = json.load(f_meta)
+                    with open(metadata_path, "r", encoding="utf-8") as f_meta:
+                        metadata = json.load(f_meta)
                     status = metadata.get("user_status", USER_STATUS_PENDING)
                     tags = metadata.get("llm_generated_tags", [])
-                except Exception: pass 
-            runs_with_status.append({"name": run_name, "user_status": status, "tags": tags})
-    except Exception as e: log_dashboard_error(f"Index: Error reading Resultat dir or metadata: {e}")
+                except Exception:
+                    pass
+            yield {"name": entry.name, "user_status": status, "tags": tags}
+    except Exception as e:
+        log_dashboard_error(f"Error reading Resultat dir or metadata: {e}")
+        raise
+
+@app.route("/")
+def index():
+    try:
+        runs_with_status = list(list_runs_with_status())
+    except Exception as e:
+        log_dashboard_error(f"Index: {e}")
+        runs_with_status = []
     return render_template("index.html", runs_with_status=runs_with_status)
 
 
 @app.route("/api/runs")
 def get_runs_api():
-
-    ensure_resultat_dir(); runs_with_status = []
-
     try:
-        # Sort directories by modification time, newest first
-        dirs = [d for d in os.listdir(RESULTAT_DIR_DASHBOARD) if os.path.isdir(os.path.join(RESULTAT_DIR_DASHBOARD, d))]
-        run_names = sorted(dirs, key=lambda d: os.path.getmtime(os.path.join(RESULTAT_DIR_DASHBOARD, d)), reverse=True)
-
-        for run_name in run_names:
-            status = USER_STATUS_PENDING; tags = []
-            metadata_path = os.path.join(RESULTAT_DIR_DASHBOARD, run_name, "run_metadata.json")
-            if os.path.isfile(metadata_path):
-                try:
-                    with open(metadata_path, "r", encoding="utf-8") as f_meta: metadata = json.load(f_meta)
-                    status = metadata.get("user_status", USER_STATUS_PENDING)
-                    tags = metadata.get("llm_generated_tags", [])
-                except Exception: pass
-            runs_with_status.append({"name": run_name, "user_status": status, "tags": tags})
-    except Exception as e: log_dashboard_error(f"API Err read Resultat: {e}"); return jsonify({"error": str(e)}), 500
+        runs_with_status = list(list_runs_with_status())
+    except Exception as e:
+        log_dashboard_error(f"API Err read Resultat: {e}")
+        return jsonify({"error": str(e)}), 500
     return jsonify(runs_with_status)
+
 
 
 
