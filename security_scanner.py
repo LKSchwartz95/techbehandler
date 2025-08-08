@@ -1,8 +1,12 @@
 import os
 import subprocess
 from pathlib import Path
+import sys
 
 PROJECT_ROOT = Path(__file__).resolve().parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.append(str(PROJECT_ROOT))
+from utils import sanitize_run_name
 RESULTAT_DIR = PROJECT_ROOT / "Resultat"
 
 
@@ -77,7 +81,12 @@ def run_yara_scan(rule_file: str | os.PathLike, target: str | os.PathLike, run_d
     return str(output_file)
 
 
-def run_all_scans(run_name: str, yara_rule: str | os.PathLike | None = None, yara_target: str | os.PathLike | None = None):
+def run_all_scans(
+    run_name: str,
+    yara_rule: str | os.PathLike | None = None,
+    yara_target: str | os.PathLike | None = None,
+):
+    run_name = sanitize_run_name(run_name)
     run_dir = RESULTAT_DIR / run_name
     os.makedirs(run_dir, exist_ok=True)
     results = {
