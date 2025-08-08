@@ -74,3 +74,43 @@ Run the automated tests with [pytest](https://docs.pytest.org/):
 ```bash
 pytest
 ```
+
+## Security & Operational Guide
+
+The application analyses potentially untrusted artifacts. The following steps
+help keep deployments secure and reliable:
+
+### Dashboard hardening
+
+- **Secret key and credentials** – Set `DASHBOARD_SECRET_KEY`,
+  `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD` in the environment before
+  starting the dashboard. The built‑in defaults are for development only.
+- **Session protection** – Run the dashboard behind TLS‑terminating
+  infrastructure (for example, a reverse proxy such as Nginx) and avoid
+  exposing it directly to the internet.
+
+### Safe run management
+
+- Use simple, alphanumeric run names to keep results inside the `Resultat`
+  directory. Sanitise user supplied run names if integrating the scanning
+  functions into other tools.
+- Review generated reports before downloading to ensure they do not contain
+  sensitive data that should remain on the analysis host.
+
+### Tool downloads
+
+- Only install optional tools from trusted sources. Verify checksums where
+  available and monitor for updates to fix upstream security issues.
+
+## Future Improvements
+
+Ideas for strengthening the project:
+
+- Enforce stricter validation on run names and file paths to prevent path
+  traversal attacks.
+- Replace simple `startswith` checks with `os.path.commonpath` for verifying
+  paths.
+- Validate extracted files when installing tools to mitigate Zip Slip
+  vulnerabilities.
+- Introduce CSRF protection and hashed passwords for the dashboard login.
+- Replace bare `except: pass` blocks with explicit error handling and logging.
