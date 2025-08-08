@@ -25,7 +25,8 @@ def gather_system_logs(run_dir: Path) -> str:
             try:
                 with open(p, "r", encoding="utf-8", errors="ignore") as src:
                     out_f.write(f"--- {p} ---\n")
-                    out_f.write(src.read())
+                    for chunk in iter(lambda: src.read(65536), ""):
+                        out_f.write(chunk)
                     out_f.write("\n")
             except Exception as e:
                 out_f.write(f"Could not read {p}: {e}\n")
