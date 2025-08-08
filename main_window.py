@@ -238,9 +238,12 @@ class MainWindow(QWidget):
         self.open_browser_btn = QPushButton("Open Dashboard in Browser")
         self.open_resultat_btn = QPushButton("Open Results Folder")
         self.export_pdf_btn = QPushButton("Export PDF")
-        self.port_label = QLabel("Port:")
+        self.port_label = QLabel("Dashboard Port:")
         self.port_spin = QSpinBox()
         self.port_spin.setRange(1024, 65535)
+        self.webboard_port_label = QLabel("Webboard Port:")
+        self.webboard_port_spin = QSpinBox()
+        self.webboard_port_spin.setRange(1024, 65535)
         dashboard_utils_layout.addWidget(self.dashboard_btn)
         dashboard_utils_layout.addWidget(self.webboard_btn)
         dashboard_utils_layout.addWidget(self.open_browser_btn)
@@ -249,6 +252,8 @@ class MainWindow(QWidget):
         dashboard_utils_layout.addStretch()
         dashboard_utils_layout.addWidget(self.port_label)
         dashboard_utils_layout.addWidget(self.port_spin)
+        dashboard_utils_layout.addWidget(self.webboard_port_label)
+        dashboard_utils_layout.addWidget(self.webboard_port_spin)
         dashboard_group.setLayout(dashboard_utils_layout)
 
         guard_mode_group = QGroupBox("Guard Mode (Auto-Process Folder)")
@@ -693,6 +698,7 @@ class MainWindow(QWidget):
         self.append_console(f"Settings loaded from {config_handler.CONFIG_FILE_PATH}")
         
         self.port_spin.setValue(self.settings["ollama_dashboard_port"])
+        self.webboard_port_spin.setValue(self.settings.get("webboard_port", self.settings["ollama_dashboard_port"] + 1))
         self.mat_memory_spinbox.setValue(self.settings["mat_memory_mb"])
         
         self.current_prompts_list = self.settings["saved_prompts"][:]
@@ -750,6 +756,7 @@ class MainWindow(QWidget):
             
         self.settings["default_ollama_model"] = self.model_selector_combo.currentText()
         self.settings["ollama_dashboard_port"] = self.port_spin.value()
+        self.settings["webboard_port"] = self.webboard_port_spin.value()
         self.settings["mat_memory_mb"] = self.mat_memory_spinbox.value()
         self.settings["saved_prompts"] = self.current_prompts_list
         
@@ -1388,8 +1395,15 @@ class MainWindow(QWidget):
         self.append_console(f"ERROR in analysis process execution (QProcess error type {error}): {proc_error_string}")
         if self.is_batch_running:
             self.append_console("Error during batch item. Moving to next file if any.")
-            QTimer.singleShot(100, self.process_next_in_batch) 
+            QTimer.singleShot(100, self.process_next_in_batch)
         else: self._set_analysis_buttons_enabled(True)
+
+    def _is_port_available(self, port):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                return s.connect_ex(("127.0.0.1", port)) != 0
+        except Exception:
+            return False
 
     def on_toggle_dashboard(self):
         port = self.port_spin.value()
@@ -1398,6 +1412,10 @@ class MainWindow(QWidget):
             if not self.dashboard_proc.waitForFinished(5000): self.dashboard_proc.kill(); self.dashboard_proc.waitForFinished(3000)
             self.dashboard_btn.setText("Launch Dashboard"); self.append_console("Dashboard stopped."); self.dashboard_proc = None
         else:
+            if not self._is_port_available(port):
+                self.append_console(f"Port {port} is already in use. Aborting.")
+                QMessageBox.warning(self, "Port In Use", f"Port {port} is already in use. Choose another port.")
+                return
             self.append_console(f"Starting dashboard on port {port}…"); self.dashboard_proc = QProcess(self)
             self.dashboard_proc.setProgram(sys.executable)
             args_dashboard = [str(PROJECT_ROOT / "dashboard.py"), f"--port={port}"]
@@ -1409,12 +1427,16 @@ class MainWindow(QWidget):
             else: self.append_console(f"ERROR starting dashboard: {self.dashboard_proc.errorString()}"); self.dashboard_proc = None
 
     def on_toggle_webboard(self):
-        port = self.port_spin.value()
+        port = self.webboard_port_spin.value()
         if self.webboard_proc and self.webboard_proc.state() != QProcess.NotRunning:
             self.append_console("Stopping webboard..."); self.webboard_proc.terminate()
             if not self.webboard_proc.waitForFinished(5000): self.webboard_proc.kill(); self.webboard_proc.waitForFinished(3000)
             self.webboard_btn.setText("Launch Webboard"); self.append_console("Webboard stopped."); self.webboard_proc = None
         else:
+            if not self._is_port_available(port):
+                self.append_console(f"Port {port} is already in use. Aborting.")
+                QMessageBox.warning(self, "Port In Use", f"Port {port} is already in use. Choose another port.")
+                return
             token = secrets.token_urlsafe(16)
             self.append_console(f"Starting webboard on port {port}…"); self.webboard_proc = QProcess(self)
             self.webboard_proc.setProgram(sys.executable)
