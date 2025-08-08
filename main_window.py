@@ -96,6 +96,7 @@ class MainWindow(QWidget):
 
         # Connect signals to slots
         self.run_btn.clicked.connect(self.on_select_and_run_analysis)
+        self.ghidra_btn.clicked.connect(self.on_select_and_run_ghidra)
         self.analyze_batch_btn.clicked.connect(self.on_start_batch_analysis)
         self.pull_model_btn.clicked.connect(self.on_pull_model_clicked)
         self.prompt_selector_combo.currentIndexChanged.connect(self.on_prompt_selected)
@@ -123,15 +124,17 @@ class MainWindow(QWidget):
         analysis_label = QLabel("<b>1. Select Diagnostic File(s):</b>")
         self.run_btn = QPushButton("Analyze Single File...")
         self.analyze_batch_btn = QPushButton("Analyze Batch/Folder...")
-        analysis_group_layout = QGridLayout() 
+        self.ghidra_btn = QPushButton("Analyze Binary with Ghidra...")
+        analysis_group_layout = QGridLayout()
         analysis_group_layout.addWidget(analysis_label, 0, 0, 1, 2)
         analysis_group_layout.addWidget(self.run_btn, 1, 0)
         analysis_group_layout.addWidget(self.analyze_batch_btn, 1, 1)
+        analysis_group_layout.addWidget(self.ghidra_btn, 2, 0, 1, 2)
         self.batch_status_label = QLabel("Batch Status: Idle")
         self.batch_progress_bar = QProgressBar()
         self.batch_progress_bar.setVisible(False)
-        analysis_group_layout.addWidget(self.batch_status_label, 2,0)
-        analysis_group_layout.addWidget(self.batch_progress_bar, 2,1)
+        analysis_group_layout.addWidget(self.batch_status_label, 3,0)
+        analysis_group_layout.addWidget(self.batch_progress_bar, 3,1)
         
         ollama_model_group_layout = QGridLayout()
         ollama_model_group_layout.addWidget(QLabel("<b>2. Configure Model & Prompts:</b>"), 0, 0, 1, 2)
@@ -442,6 +445,25 @@ class MainWindow(QWidget):
                     if found_launchers:
                         self.append_console(f"Using managed MAT installation found at: {install_path}")
                         return found_launchers[0]
+        if tool_id == "ghidra":
+            if not TOOLS_MANIFEST_PATH.exists():
+                return None
+            with open(TOOLS_MANIFEST_PATH, "r") as f:
+                manifest = json.load(f)
+            current_platform = "win64" if sys.platform == "win32" else "macos-aarch64" if sys.platform == "darwin" else "linux-x86_64"
+            for tool in manifest.get("tools", []):
+                if tool.get("id") == "ghidra" and tool.get("platform") == current_platform:
+                    install_path = PROJECT_ROOT / tool.get("install_path")
+                    if not install_path.is_dir():
+                        continue
+                    launcher_path = install_path / tool.get("launcher_relative_path")
+                    if launcher_path.is_file():
+                        self.append_console(f"Using managed Ghidra found at: {launcher_path}")
+                        return str(launcher_path)
+                    nested = next(install_path.rglob("analyzeHeadless"), None)
+                    if nested:
+                        self.append_console(f"Using managed Ghidra found at: {nested}")
+                        return str(nested)
         return None
 
     def on_llm_params_group_toggled(self, checked):
@@ -449,6 +471,7 @@ class MainWindow(QWidget):
 
     def _set_analysis_buttons_enabled(self, enabled_state):
         self.run_btn.setEnabled(enabled_state)
+        self.ghidra_btn.setEnabled(enabled_state)
         self.analyze_batch_btn.setEnabled(enabled_state)
         ollama_ready = self.ollama_available and (self.ollama_server_proc and self.ollama_server_proc.state() == QProcess.Running)
         can_toggle_guard = enabled_state and ollama_ready 
@@ -708,6 +731,17 @@ class MainWindow(QWidget):
             self.settings["last_hprof_dir"] = os.path.dirname(file_path)
             self.trigger_analysis_for_file(file_path)
 
+    def on_select_and_run_ghidra(self):
+        if self.is_batch_running or (self.analysis_proc and self.analysis_proc.state() != QProcess.NotRunning):
+            QMessageBox.information(self, "Busy", "An analysis or batch process is already in progress.")
+            return
+
+        last_dir = self.settings.get("last_hprof_dir", str(PROJECT_ROOT))
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select Binary for Ghidra Analysis", last_dir, "All Files (*)")
+        if file_path:
+            self.settings["last_hprof_dir"] = os.path.dirname(file_path)
+            self.trigger_analysis_for_file(file_path, forced_analysis_type="ghidra")
+
     def on_start_batch_analysis(self):
         if self.is_batch_running or (self.analysis_proc and self.analysis_proc.state() != QProcess.NotRunning):
             QMessageBox.information(self, "Busy", "An analysis or batch process is already in progress.")
@@ -752,7 +786,7 @@ class MainWindow(QWidget):
         self.settings["last_hprof_dir"] = os.path.dirname(file_path) 
         self.trigger_analysis_for_file(file_path) 
     
-    def trigger_analysis_for_file(self, source_file_path):
+    def trigger_analysis_for_file(self, source_file_path, forced_analysis_type=None):
         run_dir = ""
         analysis_file = ""
 
@@ -783,14 +817,28 @@ class MainWindow(QWidget):
                 self._analysis_ended_or_failed(); return
         
         lower_analysis_file = str(analysis_file).lower()
-        is_hprof = lower_analysis_file.endswith(".hprof")
-        is_txt = lower_analysis_file.endswith(".txt")
-        is_pcap = lower_analysis_file.endswith((".pcap", ".pcapng"))
+        if forced_analysis_type:
+            analysis_type = forced_analysis_type
+        elif lower_analysis_file.endswith(".hprof"):
+            analysis_type = "hprof"
+        elif lower_analysis_file.endswith(".txt"):
+            analysis_type = "threaddump"
+        elif lower_analysis_file.endswith((".pcap", ".pcapng")):
+            analysis_type = "pcap"
+        else:
+            analysis_type = "unknown"
+
+        is_hprof = analysis_type == "hprof"
+        is_txt = analysis_type == "threaddump"
+        is_pcap = analysis_type == "pcap"
+        is_ghidra = analysis_type == "ghidra"
         
         tool_launcher = None
         prompt_name = None
-        extra_args = []
+        extra_args = []  # will be populated below
         
+        extra_args = ["--analysis-type", analysis_type]
+
         if is_hprof:
             self.settings_tabs.setCurrentWidget(self.hprof_tab)
             tool_launcher = self.get_tool_launcher_path("mat")
@@ -818,8 +866,16 @@ class MainWindow(QWidget):
                 self._analysis_ended_or_failed(); return
             extra_args.extend(["--tshark-path", tool_launcher, "--pcap-tasks", ",".join(selected_tasks)])
 
+        elif is_ghidra:
+            tool_launcher = self.get_tool_launcher_path("ghidra")
+            if not tool_launcher:
+                QMessageBox.warning(self, "Ghidra Not Found", "Ghidra is required for binary analysis.\nPlease use the Tool Manager to install it.")
+                self._analysis_ended_or_failed(); return
+            prompt_name = "Ghidra Reverse Engineering Analysis"
+            extra_args.extend(["--ghidra-headless-path", tool_launcher])
+
         else:
-            QMessageBox.warning(self, "Unsupported File", f"The file type for '{os.path.basename(str(analysis_file))}' is not supported.");
+            QMessageBox.warning(self, "Unsupported File", f"The file type for '{os.path.basename(str(analysis_file))}' is not supported.")
             self._analysis_ended_or_failed(); return
 
         prompt_index = self.prompt_selector_combo.findText(prompt_name)

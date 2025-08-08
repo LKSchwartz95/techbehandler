@@ -54,5 +54,33 @@
       "install_path": "tools/wireshark-4.2.5-macos",
       "launcher_relative_path": "tshark"
     }
+    ,
+    {
+      "id": "ghidra",
+      "name": "Ghidra",
+      "version": "11.4.1",
+      "platform": "win64",
+      "url": "https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_11.4.1_build/ghidra_11.4.1_PUBLIC_20250731.zip",
+      "install_path": "tools/ghidra-11.4.1-win64",
+      "launcher_relative_path": "ghidra_11.4.1_PUBLIC/support/analyzeHeadless"
+    },
+    {
+      "id": "ghidra",
+      "name": "Ghidra",
+      "version": "11.4.1",
+      "platform": "linux-x86_64",
+      "url": "https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_11.4.1_build/ghidra_11.4.1_PUBLIC_20250731.zip",
+      "install_path": "tools/ghidra-11.4.1-linux",
+      "launcher_relative_path": "ghidra_11.4.1_PUBLIC/support/analyzeHeadless"
+    },
+    {
+      "id": "ghidra",
+      "name": "Ghidra",
+      "version": "11.4.1",
+      "platform": "macos-aarch64",
+      "url": "https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_11.4.1_build/ghidra_11.4.1_PUBLIC_20250731.zip",
+      "install_path": "tools/ghidra-11.4.1-macos",
+      "launcher_relative_path": "ghidra_11.4.1_PUBLIC/support/analyzeHeadless"
+    }
   ]
 }

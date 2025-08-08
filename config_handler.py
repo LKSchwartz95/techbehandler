@@ -56,6 +56,18 @@ Based on all the provided data, perform the following two tasks:
 
 Your response:
 """}
+        ,{"name": "Ghidra Reverse Engineering Analysis", "template": """You are a software reverse engineer and security analyst.
+Analyze the following summary information extracted from a binary via Ghidra.
+
+**Ghidra Summary:**
+{ghidra_summary}
+
+At the very top of your response, write `Risk: XX%` where XX is your estimated risk level for this binary (0-100).
+Then list any notable security concerns or suspicious behaviors.
+Finish with a detailed explanation of what the program appears to do and any recommendations.
+
+Your response:
+"""}
     ],
     "default_prompt_name": "HPROF Comprehensive Analysis", 
     "last_hprof_dir": str(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.HomeLocation)),
