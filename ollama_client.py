@@ -2,11 +2,23 @@
 import os
 import sys
 import json
-import requests 
+import requests
 import traceback
-from datetime import datetime 
+import atexit
+from datetime import datetime
 
-LOG_FILE_OLLAMA_CLIENT = os.path.join(os.getcwd(), "ollama_client_log.txt") 
+LOG_FILE_OLLAMA_CLIENT = os.path.join(os.getcwd(), "ollama_client_log.txt")
+
+# Module-level session to leverage connection pooling across requests
+session = requests.Session()
+
+
+def _close_session():
+    """Close the global requests session on program exit."""
+    session.close()
+
+
+atexit.register(_close_session)
 
 def _log_error(msg):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -30,7 +42,7 @@ def ollama_api_generate(model_tag, prompt_text, llm_parameters, timeout=300):
     console_encoding = sys.stdout.encoding if sys.stdout else 'utf-8'
     response_obj = None
     try:
-        response_obj = requests.post(ollama_api_url, headers=headers, json=payload, timeout=timeout)
+        response_obj = session.post(ollama_api_url, headers=headers, json=payload, timeout=timeout)
         response_obj.raise_for_status()
         response_data = response_obj.json()
         if "response" in response_data: return response_data["response"].strip(), response_data
@@ -56,7 +68,7 @@ def ollama_api_chat(model_tag, messages_history, llm_parameters, timeout=300):
     console_encoding = sys.stdout.encoding if sys.stdout else 'utf-8'
     response_obj = None
     try:
-        response_obj = requests.post(ollama_api_url, headers=headers, json=payload, timeout=timeout)
+        response_obj = session.post(ollama_api_url, headers=headers, json=payload, timeout=timeout)
         response_obj.raise_for_status()
         response_data = response_obj.json()
         if "message" in response_data and "content" in response_data["message"]: return response_data["message"]["content"].strip(), response_data
