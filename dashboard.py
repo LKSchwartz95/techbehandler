@@ -673,9 +673,11 @@ def reevaluate_run(run_name):
 
 def main(argv=None, *, port=5000, host="127.0.0.1", token=None):
     ensure_resultat_dir()
+
     if argv:
         i = 0
         while i < len(argv):
+
             arg = argv[i]
             if arg == "-p" and i + 1 < len(argv):
                 i += 1
