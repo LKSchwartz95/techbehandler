@@ -3,6 +3,7 @@ import os
 import sys
 import json
 import zipfile
+import shutil
 from pathlib import Path
 import requests
 
@@ -74,11 +75,19 @@ class ToolManagerDialog(QDialog):
         self.setMinimumSize(600, 400)
         self.layout = QVBoxLayout(self)
         self.table = QTableWidget()
-        self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels(["Tool", "Version", "Platform", "Status", "Action"])
+        self.table.setColumnCount(6)
+        self.table.setHorizontalHeaderLabels([
+            "Tool",
+            "Version",
+            "Platform",
+            "Status",
+            "Action",
+            "Uninstall",
+        ])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
         self.layout.addWidget(self.table)
         self.download_thread, self.download_worker = None, None
         self.load_tools()
@@ -132,19 +141,24 @@ class ToolManagerDialog(QDialog):
             install_dir = self._find_installed_tool_dir(tool)
             status_item = QTableWidgetItem()
             action_button = QPushButton()
+            uninstall_button = QPushButton("Uninstall")
 
             if install_dir is not None:
                 status_item.setText("Installed")
                 status_item.setForeground(Qt.GlobalColor.darkGreen)
                 action_button.setText("Re-install")
+                uninstall_button.setEnabled(True)
             else:
                 status_item.setText("Not Installed")
                 status_item.setForeground(Qt.GlobalColor.red)
                 action_button.setText("Download & Install")
+                uninstall_button.setEnabled(False)
 
             self.table.setItem(row_index, 3, status_item)
             action_button.clicked.connect(lambda checked, t=tool, r=row_index: self.start_download(t, r))
+            uninstall_button.clicked.connect(lambda checked, t=tool, r=row_index: self.uninstall_tool(t, r))
             self.table.setCellWidget(row_index, 4, action_button)
+            self.table.setCellWidget(row_index, 5, uninstall_button)
 
     def start_download(self, tool_info, row_index):
         """
@@ -168,6 +182,44 @@ class ToolManagerDialog(QDialog):
         
         self.download_thread.started.connect(self.download_worker.run)
         self.download_thread.start()
+
+    def uninstall_tool(self, tool_info, row_index):
+        """Deletes the tool's installation directory after user confirmation."""
+        install_path = self._find_installed_tool_dir(tool_info)
+        if not install_path or not install_path.exists():
+            QMessageBox.information(self, "Uninstall", f"{tool_info.get('name')} is not installed.")
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Confirm Uninstall",
+            f"Are you sure you want to uninstall {tool_info.get('name')}?",
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        try:
+            shutil.rmtree(install_path)
+        except PermissionError:
+            QMessageBox.warning(
+                self,
+                "Permission Error",
+                f"Permission denied while uninstalling {tool_info.get('name')}.",
+            )
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "Uninstall Error",
+                f"Failed to uninstall {tool_info.get('name')}: {e}",
+            )
+        else:
+            QMessageBox.information(
+                self,
+                "Uninstall",
+                f"{tool_info.get('name')} has been uninstalled.",
+            )
+        finally:
+            self.load_tools()
 
     def on_download_error(self, error_msg):
         QMessageBox.critical(self, "Download Error", error_msg)
