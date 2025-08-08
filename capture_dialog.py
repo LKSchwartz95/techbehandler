@@ -7,6 +7,9 @@ import ctypes
 import pyshark
 from pathlib import Path
 from pyshark.tshark.tshark import get_tshark_interfaces
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+import threading
 
 from PySide6.QtCore import QObject, Signal, QThread
 from PySide6.QtWidgets import (
@@ -46,6 +49,34 @@ class CaptureWorker(QObject):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
+        file_ready_event = threading.Event()
+
+        class _FileReadyHandler(FileSystemEventHandler):
+            def __init__(self, file_path, event):
+                self._file_path = os.path.abspath(file_path)
+                self._event = event
+
+            def _check_ready(self, src_path):
+                if os.path.abspath(src_path) == self._file_path:
+                    try:
+                        if os.path.getsize(self._file_path) > 100:
+                            self._event.set()
+                    except OSError:
+                        pass
+
+            def on_created(self, event):
+                if not event.is_directory:
+                    self._check_ready(event.src_path)
+
+            def on_modified(self, event):
+                if not event.is_directory:
+                    self._check_ready(event.src_path)
+
+        watch_dir = os.path.dirname(self.output_file) or "."
+        observer = Observer()
+        observer.schedule(_FileReadyHandler(self.output_file, file_ready_event), watch_dir, recursive=False)
+        observer.start()
+
         try:
             self.progress.emit(f"Starting capture on '{self.interface}' for {self.duration} seconds...")
             os.makedirs(os.path.dirname(self.output_file), exist_ok=True)
@@ -72,16 +103,12 @@ class CaptureWorker(QObject):
             self.progress.emit("Finalizing capture file...")
 
             timeout_seconds = 10
-            poll_interval = 0.2
-            elapsed_time = 0
             file_ready = False
 
-            while elapsed_time < timeout_seconds:
-                if os.path.exists(self.output_file) and os.path.getsize(self.output_file) > 100:
-                    file_ready = True
-                    break
-                time.sleep(poll_interval)
-                elapsed_time += poll_interval
+            if os.path.exists(self.output_file) and os.path.getsize(self.output_file) > 100:
+                file_ready = True
+            else:
+                file_ready = file_ready_event.wait(timeout_seconds)
 
             if file_ready:
                 self.finished.emit(f"Capture complete. File saved to:\n{self.output_file}")
@@ -93,6 +120,8 @@ class CaptureWorker(QObject):
         except Exception as e:
             self.error.emit(f"An error occurred during capture:\n{e}")
         finally:
+            observer.stop()
+            observer.join()
             loop.close()
 
 
