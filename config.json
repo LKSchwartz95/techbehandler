@@ -69,5 +69,11 @@
         "http_reqs": true,
         "tls_alerts": true,
         "slow_resps": true
-    }
+    },
+    "lite_mode": {
+        "limit_mat_memory": true,
+        "reduce_llm_context": true,
+        "basic_wireshark_tasks": true
+    },
+    "lite_mode_enabled": false
 }
