@@ -20,7 +20,12 @@ spec_la.loader.exec_module(log_aggregator)
 def test_network_scan_and_cleanup(tmp_path: Path):
     run_dir = tmp_path
     out_path = network_scanner.run_nmap_scan("127.0.0.1", run_dir)
-    assert Path(out_path).exists()
+    txt_path = Path(out_path)
+    json_path = txt_path.with_suffix(".json")
+    assert txt_path.exists()
+    assert json_path.exists()
+    data = network_scanner.load_nmap_json(json_path)
+    assert "ports" in data
 
 
 def test_security_scans(tmp_path: Path):
