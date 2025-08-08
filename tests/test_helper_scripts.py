@@ -1,8 +1,27 @@
 import importlib.util
 import os
 from pathlib import Path
+import sys
+import types
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT_DIR))
+
+qtcore = types.ModuleType('PySide6.QtCore')
+
+class QStandardPaths:
+    class StandardLocation:
+        HomeLocation = 0
+
+    @staticmethod
+    def writableLocation(_):
+        return str(ROOT_DIR)
+
+qtcore.QStandardPaths = QStandardPaths
+pyside6 = types.ModuleType('PySide6')
+pyside6.QtCore = qtcore
+sys.modules.setdefault('PySide6', pyside6)
+sys.modules.setdefault('PySide6.QtCore', qtcore)
 
 # Load modules
 spec_ns = importlib.util.spec_from_file_location("network_scanner", ROOT_DIR / "network_scanner.py")
@@ -20,7 +39,7 @@ spec_la.loader.exec_module(log_aggregator)
 
 def test_network_scan_and_cleanup(tmp_path: Path):
     run_dir = tmp_path
-    out_path = network_scanner.run_nmap_scan("127.0.0.1", run_dir)
+    out_path = network_scanner.run_nmap_scan("127.0.0.1", run_dir, ["-Pn"])
     assert Path(out_path).exists()
 
 
