@@ -32,10 +32,37 @@ def run_osquery_scan(run_dir: Path) -> str:
     return str(output_file)
 
 
-def run_all_scans(run_name: str):
+def run_yara_scan(rule_file: str | os.PathLike, target: str | os.PathLike, run_dir: Path) -> str:
+    """Scan a file or directory with yara rules if available.
+
+    Parameters
+    ----------
+    rule_file:
+        Path to the yara rule file.
+    target:
+        File or directory to scan.
+    run_dir:
+        Output directory for the scan results.
+    """
+
+    output_file = run_dir / f"yara_{Path(target).name}.txt"
+    cmd = ["yara", str(rule_file), str(target)]
+    try:
+        with open(output_file, "w", encoding="utf-8") as f:
+            subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT, check=False)
+    except FileNotFoundError:
+        with open(output_file, "w", encoding="utf-8") as f:
+            f.write("yara not installed or not found in PATH\n")
+    return str(output_file)
+
+
+def run_all_scans(run_name: str, yara_rule: str | os.PathLike | None = None, yara_target: str | os.PathLike | None = None):
     run_dir = RESULTAT_DIR / run_name
     os.makedirs(run_dir, exist_ok=True)
-    return {
+    results = {
         "lynis": run_lynis_scan(run_dir),
         "osquery": run_osquery_scan(run_dir),
     }
+    if yara_rule and yara_target:
+        results["yara"] = run_yara_scan(yara_rule, yara_target, run_dir)
+    return results

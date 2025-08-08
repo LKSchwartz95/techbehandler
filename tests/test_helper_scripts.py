@@ -30,6 +30,15 @@ def test_security_scans(tmp_path: Path):
     assert Path(osq_path).exists()
 
 
+def test_yara_scan(tmp_path: Path):
+    rule_file = tmp_path / "rule.yar"
+    rule_file.write_text("rule dummy { strings: $a = \"dummy\" condition: $a }")
+    target_file = tmp_path / "sample.txt"
+    target_file.write_text("dummy")
+    out_path = security_scanner.run_yara_scan(rule_file, target_file, tmp_path)
+    assert Path(out_path).exists()
+
+
 def test_log_aggregation(tmp_path: Path):
     log_file = log_aggregator.gather_system_logs(tmp_path)
     assert Path(log_file).exists()

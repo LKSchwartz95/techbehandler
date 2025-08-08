@@ -10,7 +10,7 @@
 - Guides tab with live capture and dashboard instructions, plugin file types and a WIP security checklist
 - System resource monitoring with psutil
 - Repeated metrics collection via `collect_metrics_periodically`
-- Optional security scans using lynis or osquery
+- Optional security scans using lynis, osquery or yara
 - Nmap network scanning integration
 - Aggregated system log collection
 - Automated remediation suggestions based on LLM tags
