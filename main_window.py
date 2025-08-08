@@ -84,6 +84,9 @@ class MainWindow(QWidget):
         self.dashboard_proc = None
         self.webboard_proc = None
         self.pull_model_proc = None
+
+        self.dashboard_stopping = False
+        self.webboard_stopping = False
         
         self.ollama_available = False
         self.health_check_timer = None 
@@ -1393,30 +1396,21 @@ class MainWindow(QWidget):
     def _on_analysis_error(self, error):
         proc_error_string = self.analysis_proc.errorString() if self.analysis_proc else "N/A"
         self.append_console(f"ERROR in analysis process execution (QProcess error type {error}): {proc_error_string}")
+
+
         if self.is_batch_running:
             self.append_console("Error during batch item. Moving to next file if any.")
-            QTimer.singleShot(100, self.process_next_in_batch)
+            QTimer.singleShot(100, self.process_next_in_batch) 
         else: self._set_analysis_buttons_enabled(True)
-
-    def _is_port_available(self, port):
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                return s.connect_ex(("127.0.0.1", port)) != 0
-        except Exception:
-            return False
 
     def on_toggle_dashboard(self):
         port = self.port_spin.value()
         if self.dashboard_proc and self.dashboard_proc.state() != QProcess.NotRunning:
-            self.append_console("Stopping dashboard..."); self.dashboard_proc.terminate()
+            self.append_console("Stopping dashboard..."); self.dashboard_stopping = True; self.dashboard_proc.terminate()
             if not self.dashboard_proc.waitForFinished(5000): self.dashboard_proc.kill(); self.dashboard_proc.waitForFinished(3000)
-            self.dashboard_btn.setText("Launch Dashboard"); self.append_console("Dashboard stopped."); self.dashboard_proc = None
         else:
-            if not self._is_port_available(port):
-                self.append_console(f"Port {port} is already in use. Aborting.")
-                QMessageBox.warning(self, "Port In Use", f"Port {port} is already in use. Choose another port.")
-                return
-            self.append_console(f"Starting dashboard on port {port}…"); self.dashboard_proc = QProcess(self)
+            self.append_console(f"Starting dashboard on port {port}…"); self.dashboard_proc = QProcess(self); self.dashboard_stopping = False
+
             self.dashboard_proc.setProgram(sys.executable)
             args_dashboard = [str(PROJECT_ROOT / "dashboard.py"), f"--port={port}"]
             self.dashboard_proc.setArguments(args_dashboard); self.dashboard_proc.setWorkingDirectory(str(PROJECT_ROOT))
@@ -1425,6 +1419,7 @@ class MainWindow(QWidget):
             self.dashboard_proc.start()
             if self.dashboard_proc.waitForStarted(5000): self.dashboard_btn.setText("Stop Dashboard"); self.append_console("Dashboard started.")
             else: self.append_console(f"ERROR starting dashboard: {self.dashboard_proc.errorString()}"); self.dashboard_proc = None
+
 
     def on_toggle_webboard(self):
         port = self.webboard_port_spin.value()
@@ -1445,6 +1440,7 @@ class MainWindow(QWidget):
             self.webboard_proc.readyReadStandardOutput.connect(self._on_webboard_output); self.webboard_proc.readyReadStandardError.connect(self._on_webboard_error_output)
             self.webboard_proc.finished.connect(self._on_webboard_finished); self.webboard_proc.errorOccurred.connect(self._on_webboard_error)
             self.webboard_proc.start()
+
             if self.webboard_proc.waitForStarted(5000):
                 self.webboard_btn.setText("Stop Webboard")
                 url = f"http://{self._get_local_ip()}:{port}/{token}/"
@@ -1463,12 +1459,19 @@ class MainWindow(QWidget):
         for line in data.splitlines():
             self.append_console("DASHBOARD_ERR: " + line.rstrip("\r\n"))
     
-    def _on_dashboard_finished(self, exit_code, exit_status): 
-        status = "normally" if exit_status == QProcess.NormalExit else "crashed"; self.append_console(f"Dashboard finished ({status}) code {exit_code}"); self.dashboard_btn.setText("Launch Dashboard")
-    
+    def _on_dashboard_finished(self, exit_code, exit_status):
+        if self.dashboard_stopping:
+            self.append_console("Dashboard stopped.")
+        else:
+            status = "normally" if exit_status == QProcess.NormalExit else "crashed"
+            self.append_console(f"Dashboard finished ({status}) code {exit_code}")
+        self.dashboard_btn.setText("Launch Dashboard"); self.dashboard_proc = None; self.dashboard_stopping = False
+
     def _on_dashboard_error(self, error):
+        if self.dashboard_stopping and error == QProcess.ProcessError.Crashed:
+            return
         proc_error_string = self.dashboard_proc.errorString() if self.dashboard_proc else "N/A"
-        self.append_console(f"ERROR dashboard process: {error} ({proc_error_string}"); self.dashboard_btn.setText("Launch Dashboard")
+        self.append_console(f"ERROR dashboard process: {error} ({proc_error_string})"); self.dashboard_btn.setText("Launch Dashboard"); self.dashboard_proc = None; self.dashboard_stopping = False
 
     def _on_webboard_output(self):
         if not self.webboard_proc: return
@@ -1482,11 +1485,18 @@ class MainWindow(QWidget):
             self.append_console("WEBBOARD_ERR: " + line.rstrip("\r\n"))
 
     def _on_webboard_finished(self, exit_code, exit_status):
-        status = "normally" if exit_status == QProcess.NormalExit else "crashed"; self.append_console(f"Webboard finished ({status}) code {exit_code}"); self.webboard_btn.setText("Launch Webboard")
+        if self.webboard_stopping:
+            self.append_console("Webboard stopped.")
+        else:
+            status = "normally" if exit_status == QProcess.NormalExit else "crashed"
+            self.append_console(f"Webboard finished ({status}) code {exit_code}")
+        self.webboard_btn.setText("Launch Webboard"); self.webboard_proc = None; self.webboard_stopping = False
 
     def _on_webboard_error(self, error):
+        if self.webboard_stopping and error == QProcess.ProcessError.Crashed:
+            return
         proc_error_string = self.webboard_proc.errorString() if self.webboard_proc else "N/A"
-        self.append_console(f"ERROR webboard process: {error} ({proc_error_string})"); self.webboard_btn.setText("Launch Webboard")
+        self.append_console(f"ERROR webboard process: {error} ({proc_error_string})"); self.webboard_btn.setText("Launch Webboard"); self.webboard_proc = None; self.webboard_stopping = False
 
     def _get_local_ip(self):
         try:
