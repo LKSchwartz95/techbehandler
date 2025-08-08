@@ -35,6 +35,27 @@ BUNDLED_OLLAMA_DIR = PROJECT_ROOT / "Ollama"
 BUNDLED_OLLAMA_EXE_PATH = BUNDLED_OLLAMA_DIR / ("ollama.exe" if sys.platform == "win32" else "ollama")
 BUNDLED_OLLAMA_MODELS_DIR = PROJECT_ROOT / "models" / "models"
 
+# Map plugin/tool IDs to the file types they currently accept
+PLUGIN_FILE_TYPES = {
+    "mat": [".hprof", ".dmp"],
+    "wireshark": [".pcap", ".pcapng"],
+    "ghidra": [".exe", ".dll", ".so", ".bin", ".elf"],
+}
+
+# A broader list of formats Ghidra can ingest even if not all are supported
+# by this application yet
+GHIDRA_SUPPORTED_FORMATS = [
+    "ELF",
+    "PE/COFF (Windows executables and DLLs)",
+    "Mach-O",
+    "DEX",
+    "Intel HEX",
+    "Motorola S-Record",
+    "TI-Text",
+    "Raw binary",
+    "COFF and XCOFF",
+]
+
 
 class MainWindow(QWidget):
     def __init__(self):
@@ -89,10 +110,14 @@ class MainWindow(QWidget):
         analysis_control_tab = self._create_analysis_control_tab()
         dashboard_tab = self._create_dashboard_tab()
         console_tab = self._create_console_tab()
+        info_tab = self._create_info_tab()
+        wip_tab = self._create_wip_tab()
 
         self.main_tabs.addTab(analysis_control_tab, "Analysis Control")
         self.main_tabs.addTab(dashboard_tab, "Dashboard & Guard Mode")
         self.main_tabs.addTab(console_tab, "Console Output")
+        self.main_tabs.addTab(info_tab, "Guides & File Types")
+        self.main_tabs.addTab(wip_tab, "Security Checklist (WIP)")
 
         # Connect signals to slots
         self.run_btn.clicked.connect(self.on_select_and_run_analysis)
@@ -260,6 +285,100 @@ class MainWindow(QWidget):
         self.console.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         main_layout.addLayout(console_header_layout)
         main_layout.addWidget(self.console)
+        return tab_widget
+
+    def _get_installed_plugins(self):
+        plugins = {}
+        # Check for legacy MAT install
+        if LEGACY_MAT_PATH.is_dir() and any(LEGACY_MAT_PATH.iterdir()):
+            plugins["Eclipse Memory Analyzer"] = PLUGIN_FILE_TYPES.get("mat", [])
+
+        if TOOLS_MANIFEST_PATH.exists():
+            try:
+                with open(TOOLS_MANIFEST_PATH, "r") as f:
+                    manifest = json.load(f)
+                for tool in manifest.get("tools", []):
+                    install_dir = PROJECT_ROOT / tool.get("install_path")
+                    if install_dir.exists() and any(install_dir.iterdir()):
+                        plugins[tool.get("name")] = PLUGIN_FILE_TYPES.get(tool.get("id"), [])
+            except Exception:
+                pass
+        return plugins
+
+    def _create_info_tab(self):
+        tab_widget = QWidget()
+        layout = QVBoxLayout(tab_widget)
+        layout.addWidget(QLabel("<b>Detected Plugin File Types:</b>"))
+
+        plugins = self._get_installed_plugins()
+        if plugins:
+            for name, types in plugins.items():
+                lbl = QLabel(f"{name}: {', '.join(types) if types else 'None'}")
+                lbl.setWordWrap(True)
+                layout.addWidget(lbl)
+        else:
+            layout.addWidget(QLabel("No plugins detected."))
+
+        layout.addSpacing(15)
+        layout.addWidget(QLabel("<b>Live Capture Guide:</b>"))
+        live_capture_text = (
+            "1. Open the Analysis Control tab.\n"
+            "2. In Wireshark settings, click 'Live Capture'.\n"
+            "3. Choose an interface and duration, then start the capture."
+        )
+        live_label = QLabel(live_capture_text)
+        live_label.setWordWrap(True)
+        layout.addWidget(live_label)
+
+        layout.addSpacing(15)
+        layout.addWidget(QLabel("<b>Dashboard Guide:</b>"))
+        dash_text = (
+            "Use the 'Launch Dashboard' button in the Dashboard & Guard Mode tab "
+            "or run `python main.py dashboard` from the command line."
+        )
+        dash_label = QLabel(dash_text)
+        dash_label.setWordWrap(True)
+        layout.addWidget(dash_label)
+
+        layout.addSpacing(15)
+        layout.addWidget(QLabel("<b>Ghidra Supported File Types (not all handled yet):</b>"))
+        ghidra_html = "<ul>" + "".join(f"<li>{fmt}</li>" for fmt in GHIDRA_SUPPORTED_FORMATS) + "</ul>"
+        ghidra_label = QLabel(ghidra_html)
+        ghidra_label.setWordWrap(True)
+        layout.addWidget(ghidra_label)
+
+        layout.addStretch()
+        return tab_widget
+
+    def _create_wip_tab(self):
+        tab_widget = QWidget()
+        layout = QVBoxLayout(tab_widget)
+        layout.addWidget(QLabel("<b>System Hardening Checklist:</b>"))
+        hardening_steps = [
+            "Apply operating system updates",
+            "Enable automatic security updates",
+            "Turn on the firewall",
+            "Configure antivirus/antimalware software",
+            "Remove unnecessary services and software",
+        ]
+        for step in hardening_steps:
+            cb = QCheckBox(step)
+            cb.setEnabled(False)
+            layout.addWidget(cb)
+
+        layout.addSpacing(10)
+        layout.addWidget(QLabel("<b>Using DumpBehandler for IT Security:</b>"))
+        security_steps = [
+            "Run network scans with Nmap",
+            "Collect system logs via dashboard",
+            "(Planned) Scan for vulnerabilities",
+        ]
+        for step in security_steps:
+            cb = QCheckBox(step)
+            cb.setEnabled(False)
+            layout.addWidget(cb)
+
+        layout.addStretch()
         return tab_widget
 
     def _create_hprof_tab_layout(self):
