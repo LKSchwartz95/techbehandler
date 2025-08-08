@@ -13,7 +13,9 @@ from utils import sanitize_run_name
 RESULTAT_DIR = PROJECT_ROOT / "Resultat"
 
 
+
 def run_nmap_scan(target: str, run_dir: Path, extra_options: Optional[List[str]] = None) -> str:
+
     """Run an nmap scan if nmap is available."""
     output_file = run_dir / f"nmap_{target.replace('/', '_')}.txt"
     cmd = ["nmap", "-A"]
@@ -22,7 +24,14 @@ def run_nmap_scan(target: str, run_dir: Path, extra_options: Optional[List[str]]
     cmd.append(target)
     try:
         with open(output_file, "w", encoding="utf-8") as f:
-            subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT, check=False)
+            try:
+                result = subprocess.run(
+                    cmd, stdout=f, stderr=subprocess.STDOUT, check=False, timeout=timeout
+                )
+                if result.returncode != 0:
+                    f.write(f"\nCommand exited with return code {result.returncode}\n")
+            except subprocess.TimeoutExpired:
+                f.write("nmap scan timed out\n")
     except FileNotFoundError:
         with open(output_file, "w", encoding="utf-8") as f:
             f.write("nmap not installed or not found in PATH\n")
