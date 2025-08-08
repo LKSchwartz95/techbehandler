@@ -87,6 +87,7 @@ class MainWindow(QWidget):
 
         self.dashboard_stopping = False
         self.webboard_stopping = False
+        self.webboard_token = None
         
         self.ollama_available = False
         self.health_check_timer = None 
@@ -139,6 +140,7 @@ class MainWindow(QWidget):
         self.delete_prompt_btn.clicked.connect(self.on_delete_selected_prompt)
         self.dashboard_btn.clicked.connect(self.on_toggle_dashboard)
         self.webboard_btn.clicked.connect(self.on_toggle_webboard)
+        self.webboard_url_btn.clicked.connect(self.on_print_webboard_url)
         self.open_browser_btn.clicked.connect(self.on_open_browser)
         self.open_resultat_btn.clicked.connect(self.on_open_resultat_folder)
         self.export_pdf_btn.clicked.connect(self.on_export_pdf)
@@ -238,6 +240,7 @@ class MainWindow(QWidget):
         dashboard_utils_layout = QHBoxLayout()
         self.dashboard_btn = QPushButton("Launch Dashboard")
         self.webboard_btn = QPushButton("Launch Webboard")
+        self.webboard_url_btn = QPushButton("Print Webboard URL")
         self.open_browser_btn = QPushButton("Open Dashboard in Browser")
         self.open_resultat_btn = QPushButton("Open Results Folder")
         self.export_pdf_btn = QPushButton("Export PDF")
@@ -249,6 +252,7 @@ class MainWindow(QWidget):
         self.webboard_port_spin.setRange(1024, 65535)
         dashboard_utils_layout.addWidget(self.dashboard_btn)
         dashboard_utils_layout.addWidget(self.webboard_btn)
+        dashboard_utils_layout.addWidget(self.webboard_url_btn)
         dashboard_utils_layout.addWidget(self.open_browser_btn)
         dashboard_utils_layout.addWidget(self.open_resultat_btn)
         dashboard_utils_layout.addWidget(self.export_pdf_btn)
@@ -1439,16 +1443,16 @@ class MainWindow(QWidget):
     def on_toggle_webboard(self):
         port = self.webboard_port_spin.value()
         if self.webboard_proc and self.webboard_proc.state() != QProcess.NotRunning:
-            self.append_console("Stopping webboard..."); self.webboard_proc.terminate()
+            self.append_console("Stopping webboard..."); self.webboard_stopping = True; self.webboard_proc.terminate()
             if not self.webboard_proc.waitForFinished(5000): self.webboard_proc.kill(); self.webboard_proc.waitForFinished(3000)
-            self.webboard_btn.setText("Launch Webboard"); self.append_console("Webboard stopped."); self.webboard_proc = None
+            self.webboard_btn.setText("Launch Webboard"); self.append_console("Webboard stopped."); self.webboard_proc = None; self.webboard_token = None
         else:
             if not self._is_port_available(port):
                 self.append_console(f"Port {port} is already in use. Aborting.")
                 QMessageBox.warning(self, "Port In Use", f"Port {port} is already in use. Choose another port.")
                 return
-            token = secrets.token_urlsafe(16)
-            self.append_console(f"Starting webboard on port {port}…"); self.webboard_proc = QProcess(self)
+            token = secrets.token_urlsafe(16); self.webboard_token = token
+            self.append_console(f"Starting webboard on port {port}…"); self.webboard_proc = QProcess(self); self.webboard_stopping = False
             self.webboard_proc.setProgram(sys.executable)
             args_webboard = [str(PROJECT_ROOT / "dashboard.py"), f"--port={port}", "--host=0.0.0.0", f"--token={token}"]
             self.webboard_proc.setArguments(args_webboard); self.webboard_proc.setWorkingDirectory(str(PROJECT_ROOT))
@@ -1461,7 +1465,7 @@ class MainWindow(QWidget):
                 url = f"http://{self._get_local_ip()}:{port}/{token}/"
                 self.append_console(f"Webboard started. Share URL: {url}")
             else:
-                self.append_console(f"ERROR starting webboard: {self.webboard_proc.errorString()}"); self.webboard_proc = None
+                self.append_console(f"ERROR starting webboard: {self.webboard_proc.errorString()}"); self.webboard_proc = None; self.webboard_token = None
     
     def _on_dashboard_output(self): 
         if not self.dashboard_proc: return
@@ -1512,6 +1516,22 @@ class MainWindow(QWidget):
             return
         proc_error_string = self.webboard_proc.errorString() if self.webboard_proc else "N/A"
         self.append_console(f"ERROR webboard process: {error} ({proc_error_string})"); self.webboard_btn.setText("Launch Webboard"); self.webboard_proc = None; self.webboard_stopping = False
+
+    def on_print_webboard_url(self):
+        if self.webboard_proc and self.webboard_proc.state() != QProcess.NotRunning and self.webboard_token:
+            port = self.webboard_port_spin.value()
+            url = f"http://{self._get_local_ip()}:{port}/{self.webboard_token}/"
+            self.append_console(f"Webboard URL: {url}")
+        else:
+            self.append_console("Webboard is not running.")
+
+    def _is_port_available(self, port):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(("", port))
+            except OSError:
+                return False
+        return True
 
     def _get_local_ip(self):
         try:
