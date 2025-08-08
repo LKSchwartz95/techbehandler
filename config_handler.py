@@ -94,7 +94,11 @@ Your response:
         "basic_wireshark_tasks": True
     },
     "lite_mode_enabled": False,
+
+    "dashboard_api_token": ""
+
     "nmap_options": []
+
 }
 
 def load_settings():

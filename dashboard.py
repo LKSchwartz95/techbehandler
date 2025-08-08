@@ -33,11 +33,23 @@ OLLAMA_MODEL_DISPLAY_FALLBACK = "Unknown Model"
 USER_STATUS_PENDING = "pending"
 USER_STATUS_RESOLVED = "resolved"
 
-DASHBOARD_PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__)) 
+DASHBOARD_PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE_PATH_DASHBOARD = os.path.join(DASHBOARD_PROJECT_ROOT, "config.json")
-RESULTAT_DIR_DASHBOARD = os.path.join(os.getcwd(), "Resultat") 
+RESULTAT_DIR_DASHBOARD = os.path.join(os.getcwd(), "Resultat")
 DASHBOARD_LOG_FILE = os.path.join(os.getcwd(), "dashboard_log.txt")
-app.config["TOKEN_AUTH"] = False
+
+# Optional bearer token used for API requests when TOKEN_AUTH is enabled
+API_TOKEN = os.getenv("DASHBOARD_API_TOKEN")
+if not API_TOKEN:
+    try:
+        with open(CONFIG_FILE_PATH_DASHBOARD, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+            API_TOKEN = cfg.get("dashboard_api_token")
+    except Exception:
+        API_TOKEN = None
+
+app.config["TOKEN_AUTH"] = bool(API_TOKEN)
+app.config["API_TOKEN"] = API_TOKEN
 app.config["READ_ONLY_MODE"] = False
 
 capture_thread = None
@@ -67,6 +79,19 @@ def require_login():
 def enforce_read_only():
     if app.config.get("READ_ONLY_MODE") and request.method not in {"GET", "HEAD"}:
         abort(405)
+
+
+@app.before_request
+def validate_token_auth():
+    """Validate Authorization header when token-based auth is enabled."""
+    if not app.config.get("TOKEN_AUTH"):
+        return
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return Response("Missing token", 401)
+    token = auth_header.split(" ", 1)[1].strip()
+    if token != app.config.get("API_TOKEN"):
+        return Response("Invalid token", 403)
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -967,14 +992,17 @@ def main(argv=None, *, port=5000, host="127.0.0.1", token=None):
             i += 1
 
     if token:
-        app.config["TOKEN_AUTH"] = token
+        app.config["API_TOKEN"] = token
+        app.config["TOKEN_AUTH"] = True
+
+    if app.config.get("TOKEN_AUTH"):
         def missing_model_html(start_response):
             start_response("404 Not Found", [('Content-Type', 'text/html')])
             return [b"<h1>Model not found</h1>"]
         dispatch_app = DispatcherMiddleware(missing_model_html, {
             "/": app
         })
-        print(f"WebDashboard (auth) → http://{host}:{port}", flush=True)
+        print(f"WebDashboard (token auth) → http://{host}:{port}", flush=True)
         try:
             run_simple(host, port, dispatch_app, use_reloader=False)
         except OSError as e: print(f"Flask start fail: {e}"); return 1
