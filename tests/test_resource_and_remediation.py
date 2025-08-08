@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 import importlib.util
 
+import pytest
+
 ROOT_DIR = Path(__file__).resolve().parents[1]
 
 spec_rm = importlib.util.spec_from_file_location("resource_monitor", ROOT_DIR / "resource_monitor.py")
@@ -18,6 +20,7 @@ generate_remediation = remediation_engine.generate_remediation
 
 
 def test_collect_metrics(tmp_path: Path):
+    pytest.importorskip("psutil")
     out_file = tmp_path / "metrics.jsonl"
     metrics = collect_metrics(out_file)
     assert out_file.exists()
@@ -28,6 +31,7 @@ def test_collect_metrics(tmp_path: Path):
 
 def test_collect_metrics_current_directory(tmp_path: Path, monkeypatch):
     """Collect metrics when output path is in the current working directory."""
+    pytest.importorskip("psutil")
     monkeypatch.chdir(tmp_path)
     out_file = Path("metrics.jsonl")
     metrics = collect_metrics(out_file)
@@ -37,6 +41,7 @@ def test_collect_metrics_current_directory(tmp_path: Path, monkeypatch):
 
 
 def test_collect_metrics_periodically(tmp_path: Path):
+    pytest.importorskip("psutil")
     out_file = tmp_path / "metrics.jsonl"
     results = collect_metrics_periodically(out_file, iterations=3, interval_seconds=0)
     assert len(results) == 3

@@ -3,7 +3,10 @@ import os
 import time
 from pathlib import Path
 
-import psutil
+try:
+    import psutil
+except ImportError:  # pragma: no cover - handled by graceful fallback
+    psutil = None
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 RESULTAT_DIR = PROJECT_ROOT / "Resultat"
@@ -26,14 +29,27 @@ def collect_metrics(output_file: str | os.PathLike):
     # callers to write metrics directly to the current working directory.
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    metrics = {
-        "timestamp": time.time(),
-        "cpu_percent": psutil.cpu_percent(interval=1),
-        "memory_percent": psutil.virtual_memory().percent,
-        "disk_percent": psutil.disk_usage("/").percent,
-        "net_bytes_sent": psutil.net_io_counters().bytes_sent,
-        "net_bytes_recv": psutil.net_io_counters().bytes_recv,
-    }
+    metrics = {"timestamp": time.time()}
+    if psutil is None:
+        metrics.update(
+            {
+                "cpu_percent": None,
+                "memory_percent": None,
+                "disk_percent": None,
+                "net_bytes_sent": None,
+                "net_bytes_recv": None,
+            }
+        )
+    else:
+        metrics.update(
+            {
+                "cpu_percent": psutil.cpu_percent(interval=1),
+                "memory_percent": psutil.virtual_memory().percent,
+                "disk_percent": psutil.disk_usage("/").percent,
+                "net_bytes_sent": psutil.net_io_counters().bytes_sent,
+                "net_bytes_recv": psutil.net_io_counters().bytes_recv,
+            }
+        )
 
     with output_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(metrics) + "\n")
