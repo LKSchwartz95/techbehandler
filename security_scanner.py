@@ -1,5 +1,6 @@
 import os
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import logging
@@ -97,6 +98,7 @@ def run_all_scans(
 
     run_dir = RESULTAT_DIR / run_name
     os.makedirs(run_dir, exist_ok=True)
+
     results = {
         "lynis": run_lynis_scan(run_dir),
         "osquery": run_osquery_scan(run_dir),
@@ -113,4 +115,5 @@ def run_all_scans(
                 yara_rule,
                 yara_target,
             )
+
     return results
