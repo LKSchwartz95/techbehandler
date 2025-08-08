@@ -1,9 +1,8 @@
 import importlib.util
-from pathlib import Path
 import json
 import sys
 import types
-
+from pathlib import Path
 
 def load_module(tmp_path):
     qtcore = types.ModuleType('PySide6.QtCore')
