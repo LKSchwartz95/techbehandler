@@ -43,7 +43,7 @@ def collect_metrics(output_file: str | os.PathLike):
     else:
         metrics.update(
             {
-                "cpu_percent": psutil.cpu_percent(interval=1),
+                "cpu_percent": psutil.cpu_percent(interval=None),
                 "memory_percent": psutil.virtual_memory().percent,
                 "disk_percent": psutil.disk_usage("/").percent,
                 "net_bytes_sent": psutil.net_io_counters().bytes_sent,

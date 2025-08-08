@@ -19,25 +19,43 @@ collect_metrics_periodically = resource_monitor.collect_metrics_periodically
 generate_remediation = remediation_engine.generate_remediation
 
 
-def test_collect_metrics(tmp_path: Path):
+def test_collect_metrics(tmp_path: Path, monkeypatch):
     pytest.importorskip("psutil")
+    recorded: dict[str, float | None] = {}
+
+    def fake_cpu_percent(*, interval=None):
+        recorded["interval"] = interval
+        return 12.0
+
+    monkeypatch.setattr(resource_monitor.psutil, "cpu_percent", fake_cpu_percent)
     out_file = tmp_path / "metrics.jsonl"
     metrics = collect_metrics(out_file)
+    assert recorded["interval"] is None
     assert out_file.exists()
     with out_file.open() as f:
         data = json.loads(f.readline())
-    assert metrics["cpu_percent"] == data["cpu_percent"]
+    assert metrics["cpu_percent"] == data["cpu_percent"] == 12.0
+
 
 
 def test_collect_metrics_current_directory(tmp_path: Path, monkeypatch):
     """Collect metrics when output path is in the current working directory."""
     pytest.importorskip("psutil")
+
+    recorded: dict[str, float | None] = {}
+
+    def fake_cpu_percent(*, interval=None):
+        recorded["interval"] = interval
+        return 34.0
+
+    monkeypatch.setattr(resource_monitor.psutil, "cpu_percent", fake_cpu_percent)
     monkeypatch.chdir(tmp_path)
     out_file = Path("metrics.jsonl")
     metrics = collect_metrics(out_file)
+    assert recorded["interval"] is None
     assert out_file.exists()
     data = json.loads(out_file.read_text().splitlines()[0])
-    assert metrics["cpu_percent"] == data["cpu_percent"]
+    assert metrics["cpu_percent"] == data["cpu_percent"] == 34.0
 
 
 def test_collect_metrics_periodically(tmp_path: Path):
