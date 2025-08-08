@@ -14,7 +14,9 @@ RESULTAT_DIR = PROJECT_ROOT / "Resultat"
 
 
 
+
 def run_nmap_scan(target: str, run_dir: Path, extra_options: Optional[List[str]] = None) -> str:
+
 
     """Run an nmap scan if nmap is available."""
     output_file = run_dir / f"nmap_{target.replace('/', '_')}.txt"
