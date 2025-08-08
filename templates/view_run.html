@@ -204,7 +204,7 @@
                                 <h6>LLM Parameters Used</h6>
                                 <pre><code>{{ llm_params_json }}</code></pre>
                                 <h6 class="mt-3">Diagnostic Data</h6>
-                                <pre id="diagnosticPre"><code>{{ thread_dump_details }}</code></pre>
+                                <pre id="diagnosticPre"><code>{{ oom_trace_details|safe }}</code></pre>
                             </div>
                         </div>
                     </div>
@@ -246,11 +246,11 @@
 
 
 
-                    <!-- Files Accordion Item -->
+                    <!-- Other Files Accordion Item -->
                     <div class="accordion-item">
                         <h2 class="accordion-header">
                             <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseFiles" aria-expanded="false" aria-controls="collapseFiles">
-                                <i class="bi bi-folder2-open me-2"></i>Report Files
+                                <i class="bi bi-folder2-open me-2"></i>Other Files
 
                             </button>
                         </h2>
