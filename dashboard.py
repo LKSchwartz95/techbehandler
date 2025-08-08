@@ -2,6 +2,9 @@
 # Filename: dashboard.py
 from flask import (Flask, render_template, send_from_directory, abort, url_for,
                    jsonify, request, Response, session, redirect)
+from werkzeug.middleware.dispatcher import DispatcherMiddleware
+from werkzeug.serving import run_simple
+from werkzeug.wrappers import Response as WsgiResponse
 from xhtml2pdf import pisa
 from io import BytesIO
 from bs4 import BeautifulSoup
@@ -32,14 +35,24 @@ DASHBOARD_PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE_PATH_DASHBOARD = os.path.join(DASHBOARD_PROJECT_ROOT, "config.json")
 RESULTAT_DIR_DASHBOARD = os.path.join(os.getcwd(), "Resultat") 
 DASHBOARD_LOG_FILE = os.path.join(os.getcwd(), "dashboard_log.txt")
+app.config["TOKEN_AUTH"] = False
+app.config["READ_ONLY_MODE"] = False
 
 
 @app.before_request
 def require_login():
     """Require login if credentials are set via environment variables."""
+    if app.config.get("TOKEN_AUTH"):
+        return
     if AUTH_USERNAME and AUTH_PASSWORD:
         if request.endpoint not in {"login", "static"} and not session.get("logged_in"):
             return redirect(url_for("login", next=request.path))
+
+
+@app.before_request
+def enforce_read_only():
+    if app.config.get("READ_ONLY_MODE") and request.method not in {"GET", "HEAD"}:
+        abort(405)
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -658,25 +671,46 @@ def reevaluate_run(run_name):
         log_dashboard_error(f"Re-eval: Failed to update files for {run_name}: {e}")
         return jsonify({"success": False, "error": f"Failed to save new analysis: {e}"}), 500
 
-def main(argv=None):
-    ensure_resultat_dir(); port, host = 5000, "127.0.0.1"
-    if argv: 
-        i=0
+def main(argv=None, *, port=5000, host="127.0.0.1", token=None):
+    ensure_resultdir()
+    if argv:
+        i = 0
         while i < len(argv):
             arg = argv[i]
-            if arg == "--port" and i + 1 < len(argv): 
-                try: port = int(argv[i+1]); i+=1
-                except ValueError: print(f"WARN: Invalid port '{argv[i+1]}'", file=sys.stderr)
-            elif arg.startswith("--port="): 
-                try: port = int(arg.split("=",1)[1])
-                except ValueError: print(f"WARN: Invalid port in '{arg}'", file=sys.stderr)
-            elif arg == "--host" and i + 1 < len(argv): host = argv[i+1]; i+=1
-            elif arg.startswith("--host="): host = arg.split("=",1)[1]
-            elif arg == "--help": print("Usage: dashboard.py [--port P] [--host H]"); return 0
-            i+=1
-    print(f"Flask dashboard starting. Results: {RESULTAT_DIR_DASHBOARD}. URL: http://{host}:{port}/", flush=True)
-    try: app.run(host=host, port=port, debug=False) # Debug=False for production/distribution
-    except OSError as e: print(f"ERROR Flask: {e}", file=sys.stderr); log_dashboard_error(f"Flask start fail: {e}"); return 1
+            if arg == "-p" and i + 1 < len(argv):
+                i += 1
+                try: port = int(argv[i])
+                except ValueError: print("Invalid port [%r]" % argv[i], file=sys.stderr)
+            elif arg == "-h" and i + 1 < len(argv):
+                i += 1
+                host = argv[i]
+            elif arg == "--token" and i + 1 < len(argv):
+                i += 1
+                token = argv[i]
+            elif arg.startswith("--host="): host = arg.split("=")[1]
+            elif arg.startswith("--port="): port = int(arg.split("=")[1])
+            elif arg == "--help": print("Usage: dashboard.py [-p port] [-h host] [--token T]"); return 1
+            i += 1
+
+    if token:
+        app.config["TOKEN_AUTH"] = token
+        def missing_model_html(start_response):
+            start_response("404 Not Found", [('Content-Type', 'text/html')])
+            return [b"<h1>Model not found</h1>"]
+        dispatch_app = DispatcherMiddleware(missing_model_html, {
+            "/": app
+        })
+        print(f"WebDashboard (auth) → http://{host}:{port}", flush=True)
+        try:
+            run_simple(host, port, dispatch_app, use_reloader=False)
+        except OSError as e: print(f"Flask start fail: {e}"); return 1
+        return 0
+
+    print(f"Flask dashboard starting. Results: {RESULTAT_DIR_DASHBOARD} — URL: http://{host}:{port}/", flush=True)
+    try: app.run(host=host, port=port)
+    except OSError as e: print(f"Flask start fail: {e}"); log_dashboard_error(f"Flask start fail: {e}"); return 1
     return 0
 
-if __name__ == "__main__": sys.exit(main(sys.argv[1:]))
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

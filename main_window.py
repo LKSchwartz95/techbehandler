@@ -9,6 +9,8 @@ import glob
 from pathlib import Path
 import shutil
 import requests
+import secrets
+import socket
 
 from PySide6.QtWidgets import (
     QWidget, QPushButton, QVBoxLayout, QHBoxLayout, QGridLayout,
@@ -80,6 +82,7 @@ class MainWindow(QWidget):
         self.ollama_server_proc = None
         self.analysis_proc = None
         self.dashboard_proc = None
+        self.webboard_proc = None
         self.pull_model_proc = None
         
         self.ollama_available = False
@@ -132,6 +135,7 @@ class MainWindow(QWidget):
         self.save_prompt_as_btn.clicked.connect(self.on_save_prompt_as)
         self.delete_prompt_btn.clicked.connect(self.on_delete_selected_prompt)
         self.dashboard_btn.clicked.connect(self.on_toggle_dashboard)
+        self.webboard_btn.clicked.connect(self.on_toggle_webboard)
         self.open_browser_btn.clicked.connect(self.on_open_browser)
         self.open_resultat_btn.clicked.connect(self.on_open_resultat_folder)
         self.export_pdf_btn.clicked.connect(self.on_export_pdf)
@@ -230,6 +234,7 @@ class MainWindow(QWidget):
         dashboard_group = QGroupBox("Dashboard Utilities")
         dashboard_utils_layout = QHBoxLayout()
         self.dashboard_btn = QPushButton("Launch Dashboard")
+        self.webboard_btn = QPushButton("Launch Webboard")
         self.open_browser_btn = QPushButton("Open Dashboard in Browser")
         self.open_resultat_btn = QPushButton("Open Results Folder")
         self.export_pdf_btn = QPushButton("Export PDF")
@@ -237,6 +242,7 @@ class MainWindow(QWidget):
         self.port_spin = QSpinBox()
         self.port_spin.setRange(1024, 65535)
         dashboard_utils_layout.addWidget(self.dashboard_btn)
+        dashboard_utils_layout.addWidget(self.webboard_btn)
         dashboard_utils_layout.addWidget(self.open_browser_btn)
         dashboard_utils_layout.addWidget(self.open_resultat_btn)
         dashboard_utils_layout.addWidget(self.export_pdf_btn)
@@ -1385,22 +1391,44 @@ class MainWindow(QWidget):
             QTimer.singleShot(100, self.process_next_in_batch) 
         else: self._set_analysis_buttons_enabled(True)
 
-    def on_toggle_dashboard(self): 
+    def on_toggle_dashboard(self):
         port = self.port_spin.value()
         if self.dashboard_proc and self.dashboard_proc.state() != QProcess.NotRunning:
-            self.append_console("Stopping dashboard..."); self.dashboard_proc.terminate() 
+            self.append_console("Stopping dashboard..."); self.dashboard_proc.terminate()
             if not self.dashboard_proc.waitForFinished(5000): self.dashboard_proc.kill(); self.dashboard_proc.waitForFinished(3000)
             self.dashboard_btn.setText("Launch Dashboard"); self.append_console("Dashboard stopped."); self.dashboard_proc = None
         else:
             self.append_console(f"Starting dashboard on port {port}…"); self.dashboard_proc = QProcess(self)
             self.dashboard_proc.setProgram(sys.executable)
             args_dashboard = [str(PROJECT_ROOT / "dashboard.py"), f"--port={port}"]
-            self.dashboard_proc.setArguments(args_dashboard); self.dashboard_proc.setWorkingDirectory(str(PROJECT_ROOT)) 
+            self.dashboard_proc.setArguments(args_dashboard); self.dashboard_proc.setWorkingDirectory(str(PROJECT_ROOT))
             self.dashboard_proc.readyReadStandardOutput.connect(self._on_dashboard_output); self.dashboard_proc.readyReadStandardError.connect(self._on_dashboard_error_output)
             self.dashboard_proc.finished.connect(self._on_dashboard_finished); self.dashboard_proc.errorOccurred.connect(self._on_dashboard_error)
             self.dashboard_proc.start()
             if self.dashboard_proc.waitForStarted(5000): self.dashboard_btn.setText("Stop Dashboard"); self.append_console("Dashboard started.")
             else: self.append_console(f"ERROR starting dashboard: {self.dashboard_proc.errorString()}"); self.dashboard_proc = None
+
+    def on_toggle_webboard(self):
+        port = self.port_spin.value()
+        if self.webboard_proc and self.webboard_proc.state() != QProcess.NotRunning:
+            self.append_console("Stopping webboard..."); self.webboard_proc.terminate()
+            if not self.webboard_proc.waitForFinished(5000): self.webboard_proc.kill(); self.webboard_proc.waitForFinished(3000)
+            self.webboard_btn.setText("Launch Webboard"); self.append_console("Webboard stopped."); self.webboard_proc = None
+        else:
+            token = secrets.token_urlsafe(16)
+            self.append_console(f"Starting webboard on port {port}…"); self.webboard_proc = QProcess(self)
+            self.webboard_proc.setProgram(sys.executable)
+            args_webboard = [str(PROJECT_ROOT / "dashboard.py"), f"--port={port}", "--host=0.0.0.0", f"--token={token}"]
+            self.webboard_proc.setArguments(args_webboard); self.webboard_proc.setWorkingDirectory(str(PROJECT_ROOT))
+            self.webboard_proc.readyReadStandardOutput.connect(self._on_webboard_output); self.webboard_proc.readyReadStandardError.connect(self._on_webboard_error_output)
+            self.webboard_proc.finished.connect(self._on_webboard_finished); self.webboard_proc.errorOccurred.connect(self._on_webboard_error)
+            self.webboard_proc.start()
+            if self.webboard_proc.waitForStarted(5000):
+                self.webboard_btn.setText("Stop Webboard")
+                url = f"http://{self._get_local_ip()}:{port}/{token}/"
+                self.append_console(f"Webboard started. Share URL: {url}")
+            else:
+                self.append_console(f"ERROR starting webboard: {self.webboard_proc.errorString()}"); self.webboard_proc = None
     
     def _on_dashboard_output(self): 
         if not self.dashboard_proc: return
@@ -1416,9 +1444,38 @@ class MainWindow(QWidget):
     def _on_dashboard_finished(self, exit_code, exit_status): 
         status = "normally" if exit_status == QProcess.NormalExit else "crashed"; self.append_console(f"Dashboard finished ({status}) code {exit_code}"); self.dashboard_btn.setText("Launch Dashboard")
     
-    def _on_dashboard_error(self, error): 
+    def _on_dashboard_error(self, error):
         proc_error_string = self.dashboard_proc.errorString() if self.dashboard_proc else "N/A"
         self.append_console(f"ERROR dashboard process: {error} ({proc_error_string}"); self.dashboard_btn.setText("Launch Dashboard")
+
+    def _on_webboard_output(self):
+        if not self.webboard_proc: return
+        data = self.webboard_proc.readAllStandardOutput().data().decode(sys.stdout.encoding or "utf-8", errors="replace")
+        for line in data.splitlines(): self.append_console(line.rstrip('\r\n'))
+
+    def _on_webboard_error_output(self):
+        if not self.webboard_proc: return
+        data = self.webboard_proc.readAllStandardError().data().decode(sys.stderr.encoding or "utf-8", errors="replace")
+        for line in data.splitlines():
+            self.append_console("WEBBOARD_ERR: " + line.rstrip("\r\n"))
+
+    def _on_webboard_finished(self, exit_code, exit_status):
+        status = "normally" if exit_status == QProcess.NormalExit else "crashed"; self.append_console(f"Webboard finished ({status}) code {exit_code}"); self.webboard_btn.setText("Launch Webboard")
+
+    def _on_webboard_error(self, error):
+        proc_error_string = self.webboard_proc.errorString() if self.webboard_proc else "N/A"
+        self.append_console(f"ERROR webboard process: {error} ({proc_error_string})"); self.webboard_btn.setText("Launch Webboard")
+
+    def _get_local_ip(self):
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+        except Exception:
+            ip = "127.0.0.1"
+        finally:
+            s.close()
+        return ip
     
     def on_open_browser(self): 
         url_string = f"http://localhost:{self.port_spin.value()}/"; 
@@ -1438,6 +1495,9 @@ class MainWindow(QWidget):
         if self.guard_mode_timer.isActive(): self.guard_mode_timer.stop()
         if self.analysis_proc and self.analysis_proc.state() != QProcess.NotRunning: self.analysis_proc.kill(); self.analysis_proc.waitForFinished(3000)
         if self.dashboard_proc and self.dashboard_proc.state() != QProcess.NotRunning: self.dashboard_proc.kill(); self.dashboard_proc.waitForFinished(3000)
+        if self.webboard_proc and self.webboard_proc.state() != QProcess.NotRunning: self.webboard_proc.kill(); self.webboard_proc.waitForFinished(3000)
         if self.pull_model_proc and self.pull_model_proc.state() != QProcess.NotRunning: self.pull_model_proc.kill(); self.pull_model_proc.waitForFinished(3000)
+
         self.stop_ollama_server()
         super().closeEvent(event)
+
