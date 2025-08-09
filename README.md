@@ -5,6 +5,7 @@
 - Optional Guard Mode for automatically watching a folder
 - Live capture of network traffic using tshark
 - Configurable keyword search within packet captures
+- Optional TCP error summaries (retransmissions, lost segments, resets)
 - Manage optional tools via the built in tool manager
 - Binary analysis with Ghidra, using a bundled download or a user-selected system installation
 - Configurable prompt templates for LLM based analysis
