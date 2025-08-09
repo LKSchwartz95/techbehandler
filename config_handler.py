@@ -88,6 +88,7 @@ Your response:
         "tcp_conv": True, "ip_conv": False, "dns_stats": True,
         "http_reqs": True, "tls_alerts": True, "slow_resps": False
     },
+    "wireshark_keyword_filters": [],
     "lite_mode": {
         "limit_mat_memory": True,
         "reduce_llm_context": True,

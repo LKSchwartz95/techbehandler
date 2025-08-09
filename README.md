@@ -4,6 +4,7 @@
 - Run a Flask based dashboard to review run results
 - Optional Guard Mode for automatically watching a folder
 - Live capture of network traffic using tshark
+- Configurable keyword search within packet captures
 - Manage optional tools via the built in tool manager
 - Binary analysis with Ghidra, using a bundled download or a user-selected system installation
 - Configurable prompt templates for LLM based analysis
@@ -14,6 +15,8 @@
 - Nmap network scanning integration
 - Aggregated system log collection
 - Automated remediation suggestions based on LLM tags
+
+Packet keyword searches are configured via the `wireshark_keyword_filters` list in `config.json`.
 
 ## Requirements
 

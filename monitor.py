@@ -19,7 +19,8 @@ import ghidra_analyzer
 
 PROJECT_ROOT_MONITOR = os.path.dirname(os.path.abspath(__file__))
 # RESULTAT_DIR_MONITOR is no longer the authority, run_dir passed by arg is.
-LOG_FILE_MONITOR = os.path.join(os.getcwd(), "monitor_log.txt") 
+LOG_FILE_MONITOR = os.path.join(os.getcwd(), "monitor_log.txt")
+CONFIG_FILE_PATH_MONITOR = os.path.join(PROJECT_ROOT_MONITOR, "config.json")
 
 def log_monitor_error(msg):
     try:
@@ -27,6 +28,17 @@ def log_monitor_error(msg):
             with open(LOG_FILE_MONITOR, "w", encoding="utf-8") as f: f.write(f"[{datetime.now()}] Log truncated.\n")
     except OSError: pass
     with open(LOG_FILE_MONITOR, "a", encoding="utf-8") as f: f.write(f"[{datetime.now()}] {msg}\n{traceback.format_exc()}\n")
+
+def load_keyword_filters():
+    try:
+        with open(CONFIG_FILE_PATH_MONITOR, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+            keywords = cfg.get("wireshark_keyword_filters", [])
+            if isinstance(keywords, list):
+                return [str(k) for k in keywords if k]
+    except Exception as e:
+        log_monitor_error(f"Could not load keyword filters: {e}")
+    return []
 
 def check_ollama_model_availability(model_name, ollama_cmd_path, timeout=30):
     if not os.path.isfile(ollama_cmd_path): print(f"ERROR: Ollama cmd FNF: '{ollama_cmd_path}'.", flush=True); log_monitor_error(f"Ollama cmd FNF: '{ollama_cmd_path}'."); return False
@@ -194,6 +206,51 @@ def run_tshark_task(pcap_path, tshark_exe_path, task_id):
             except OSError:
                 pass
 
+def run_tshark_keyword_search(pcap_path, tshark_exe_path, keywords):
+    results = []
+    for kw in keywords:
+        filt = kw.replace('"', '\"')
+        cmd = [
+            tshark_exe_path,
+            "-r",
+            pcap_path,
+            "-Y",
+            f'frame contains "{filt}"',
+            "-T",
+            "fields",
+            "-e",
+            "frame.number",
+            "-e",
+            "ip.src",
+            "-e",
+            "ip.dst",
+        ]
+        title = f"Keyword '{kw}'"
+        try:
+            completed = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=120,
+            )
+            if completed.returncode != 0:
+                output = f"tshark failed with exit code {completed.returncode}.\nStderr: {completed.stderr}\n"
+                log_monitor_error(output)
+                results.append(f"--- {title} (FAILED) ---\n{output}")
+            else:
+                stdout = completed.stdout.strip() or "No matches found."
+                results.append(f"--- {title} ---\n{stdout}\n")
+        except subprocess.TimeoutExpired:
+            msg = f"tshark keyword search for '{kw}' timed out after 120 seconds."
+            log_monitor_error(msg)
+            results.append(f"--- {title} (TIMED OUT) ---\n{msg}\n")
+        except Exception as e:
+            log_monitor_error(f"tshark keyword search error for '{kw}': {e}")
+            results.append(f"--- {title} (ERROR) ---\n{e}\n")
+    return "\n".join(results)
+
 def ask_ollama_model(prompt, model_tag, ollama_cmd_path_ignored, llm_params_dict, timeout=300):
     print(f"Contacting Ollama API via client with model '{model_tag}'...", flush=True)
     text_response, _ = ollama_client.ollama_api_generate(model_tag=model_tag, prompt_text=prompt, llm_parameters=llm_params_dict, timeout=timeout)
@@ -313,6 +370,9 @@ def main(argv_to_parse=None):
             for task_id in task_ids:
                 summary = run_tshark_task(args.input_file, args.tshark_path, task_id)
                 summaries.append(summary)
+            keyword_filters = load_keyword_filters()
+            if keyword_filters:
+                summaries.append(run_tshark_keyword_search(args.input_file, args.tshark_path, keyword_filters))
             tshark_summary = "\n".join(summaries)
             with open(os.path.join(run_dir, f"{base_name}_tshark_summary.txt"), "w", encoding="utf-8") as f_out: f_out.write(tshark_summary)
             md_content_header = f"### tshark Analysis Output:\n```text\n{tshark_summary or 'Not available.'}\n```\n\n"

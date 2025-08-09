@@ -60,20 +60,23 @@
         "stop": [],
         "num_predict": 1024
     },
-    "llm_params_group_checked": false,
+
+    "llm_params_group_checked": true,
     "wireshark_tasks": {
         "tcp_conv": true,
-        "ip_conv": false,
+        "ip_conv": true,
         "dns_stats": true,
         "http_reqs": true,
         "tls_alerts": true,
-        "slow_resps": false
+        "slow_resps": true
     },
+    "wireshark_keyword_filters": [],
     "lite_mode": {
         "limit_mat_memory": true,
         "reduce_llm_context": true,
         "basic_wireshark_tasks": true
     },
+
     "lite_mode_enabled": false,
     "dashboard_api_token": "",
     "nmap_options": []
