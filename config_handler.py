@@ -95,7 +95,7 @@ Your response:
     },
     "lite_mode_enabled": False,
 
-    "dashboard_api_token": ""
+    "dashboard_api_token": "",
 
     "nmap_options": []
 
