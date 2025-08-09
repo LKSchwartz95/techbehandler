@@ -73,6 +73,7 @@
         "tls_alerts": true,
         "slow_resps": true
     },
+    "wireshark_keyword_filters": [],
     "lite_mode": {
         "limit_mat_memory": true,
         "reduce_llm_context": true,
