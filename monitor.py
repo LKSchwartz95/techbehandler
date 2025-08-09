@@ -148,6 +148,7 @@ def run_tshark_task(pcap_path, tshark_exe_path, task_id):
         "dns_stats":  {"cmd": ["-q", "-z", "dns,tree"], "title": "DNS Statistics"},
         "http_reqs":  {"cmd": ["-Y", "http.request", "-T", "fields", "-e", "http.host", "-e", "http.request.method", "-e", "http.request.uri"], "title": "HTTP Requests"},
         "tls_alerts": {"cmd": ["-Y", "tls.alert_message", "-T", "fields", "-e", "frame.number", "-e", "ip.src", "-e", "ip.dst", "-e", "tls.alert_message.desc"], "title": "TLS/SSL Alerts"},
+        "tcp_errors": {"cmd": ["-Y", "tcp.analysis.retransmission || tcp.analysis.fast_retransmission || tcp.analysis.lost_segment || tcp.flags.reset==1", "-T", "fields", "-e", "frame.number", "-e", "ip.src", "-e", "ip.dst", "-e", "_ws.col.Info"], "title": "TCP Errors"},
         "slow_resps": {"cmd": ["-Y", "tcp.time_delta > 0.2", "-T", "fields", "-e", "frame.number", "-e", "ip.src", "-e", "ip.dst", "-e", "tcp.time_delta"], "title": "Slow TCP Responses (>200ms)"}
     }
 

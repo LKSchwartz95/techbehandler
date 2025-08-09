@@ -523,6 +523,7 @@ class MainWindow(QWidget):
             {"id": "dns_stats", "name": "DNS Statistics", "desc": "Analyze DNS queries and responses for errors."},
             {"id": "http_reqs", "name": "HTTP Requests", "desc": "Extract all HTTP/1.x requests (host, method, URI)."},
             {"id": "tls_alerts", "name": "TLS/SSL Alerts", "desc": "Scan for secure connection failures and warnings."},
+            {"id": "tcp_errors", "name": "TCP Errors", "desc": "List retransmissions, lost segments and resets."},
             {"id": "slow_resps", "name": "Slow TCP Responses", "desc": "Find TCP packets with a response time > 200ms."}
         ]
 
