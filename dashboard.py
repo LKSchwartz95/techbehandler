@@ -210,6 +210,22 @@ def get_runs_api():
     return jsonify(runs_with_status)
 
 
+@app.route("/api/metrics/<run_name>")
+def get_metrics(run_name):
+    if ".." in run_name or "/" in run_name or "\\" in run_name:
+        abort(403)
+    metrics_path = os.path.join(RESULTAT_DIR_DASHBOARD, run_name, "system_metrics.jsonl")
+    if not os.path.isfile(metrics_path):
+        return jsonify([])
+    try:
+        with open(metrics_path, "r", encoding="utf-8") as f:
+            metrics = [json.loads(line) for line in f if line.strip()]
+        return jsonify(metrics)
+    except Exception as e:
+        log_dashboard_error(f"Err reading metrics for {run_name}: {e}")
+        return jsonify({"error": "Failed to read metrics"}), 500
+
+
 
 
 def _capture_worker(interface, duration):
@@ -328,25 +344,29 @@ def _load_run_data_common(run_dir_path, run_name_for_log):
         "mat_overview_pie_chart_url": None,
     }
     metadata_path = os.path.join(run_dir_path, "run_metadata.json")
+    metadata = None
     if os.path.isfile(metadata_path):
         try:
             with open(metadata_path, "r", encoding="utf-8") as f_meta:
-                metadata = json.loads(f_meta.read()) 
+                metadata = json.loads(f_meta.read())
             data["model_used"] = metadata.get("model_used", OLLAMA_MODEL_DISPLAY_FALLBACK)
             ts_iso = metadata.get("analysis_timestamp_utc", "N/A")
-            if ts_iso != "N/A" and ts_iso: 
+            if ts_iso != "N/A" and ts_iso:
                  try: data["timestamp"] = datetime.fromisoformat(ts_iso.replace("Z", "+00:00")).strftime("%Y-%m-%d %H:%M:%S UTC")
-                 except ValueError: data["timestamp"] = ts_iso 
+                 except ValueError: data["timestamp"] = ts_iso
             data["hprof_source"] = metadata.get("input_file", "N/A")
             data["analysis_type"] = metadata.get("analysis_type", "unknown")
-            data["mat_memory_setting"] = metadata.get("mat_memory_mb_used", "N/A") 
+            data["mat_memory_setting"] = metadata.get("mat_memory_mb_used", "N/A")
             data["mat_report_type"] = metadata.get("mat_report_arg_used", "N/A")
             data["user_status"] = metadata.get("user_status", USER_STATUS_PENDING)
             data["llm_generated_tags"] = metadata.get("llm_generated_tags", [])
             data["llm_params_json"] = json.dumps(metadata.get("llm_parameters_used", {}), indent=4)
             data["user_notes"] = metadata.get("user_notes", "")
-        except Exception as e: log_dashboard_error(f"Err parsing metadata.json for {run_name_for_log}: {e}"); data["metadata_error"] = f"Error parsing: {e}"
-    else: data["metadata_error"] = "run_metadata.json not found"
+        except Exception as e:
+            log_dashboard_error(f"Err parsing metadata.json for {run_name_for_log}: {e}")
+            data["metadata_error"] = f"Error parsing: {e}"
+    else:
+        data["metadata_error"] = "run_metadata.json not found"
 
     temp_md_fn = None
     try: 
@@ -393,11 +413,17 @@ def _load_run_data_common(run_dir_path, run_name_for_log):
             except Exception as e_mat:
                 log_dashboard_error(f"Err parsing MAT HTML for {run_name_for_log}: {e_mat}")
 
-        # Prioritize .md files that contain 'analysis'
+        # Determine which markdown file to display
         md_files = [f for f in files_in_run_dir if f.lower().endswith(".md")]
         analysis_md_files = [f for f in md_files if 'analysis' in f.lower()]
-        
-        if analysis_md_files:
+
+        metadata_md_file = None
+        if metadata:
+            metadata_md_file = metadata.get("llm_analysis_file")
+
+        if metadata_md_file and metadata_md_file in md_files:
+            temp_md_fn = metadata_md_file
+        elif analysis_md_files:
             temp_md_fn = sorted(analysis_md_files)[0]
         elif md_files:
             temp_md_fn = sorted(md_files)[0]
@@ -412,6 +438,8 @@ def _load_run_data_common(run_dir_path, run_name_for_log):
                 analysis_section_match = re.search(r"(### LLM Analysis:.*)", md_content, re.DOTALL)
                 if analysis_section_match:
                     analysis_text = analysis_section_match.group(1).split("### LLM Analysis:",1)[1].strip()
+                    if not analysis_text:
+                        analysis_text = main_analysis_content
                     data["raw_llm_analysis_text"] = analysis_text
                     data["llm_analysis_html"] = markdown.markdown(analysis_text, extensions=['fenced_code','tables', 'nl2br'])
                 else:
