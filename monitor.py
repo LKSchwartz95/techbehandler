@@ -103,30 +103,46 @@ def unzip_mat_zip(current_run_dir, base_name, mat_report_argument_used):
     if zip_to_extract and os.path.isfile(zip_to_extract):
         try:
             with zipfile.ZipFile(zip_to_extract, "r") as z: z.extractall(current_run_dir)
-            print(f"Unzipped MAT report: {zip_to_extract}", flush=True)
+            print(f"Unzipped Memory Analyzers report: {zip_to_extract}", flush=True)
             os.remove(zip_to_extract) # Clean up the zip file after extraction
-        except zipfile.BadZipFile: print(f"ERROR: Bad zip: {zip_to_extract}", flush=True); log_monitor_error(f"Bad MAT zip: {zip_to_extract}")
-        except Exception as e: print(f"ERROR: Unzip fail {zip_to_extract}: {e}", flush=True); log_monitor_error(f"Unzip fail {zip_to_extract}: {e}")
-    else: print(f"MAT report zip not found with pattern *{zip_pattern}", flush=True)
+        except zipfile.BadZipFile:
+            print(f"ERROR: Bad zip: {zip_to_extract}", flush=True)
+            log_monitor_error(f"Bad Memory Analyzers zip: {zip_to_extract}")
+        except Exception as e:
+            print(f"ERROR: Unzip fail {zip_to_extract}: {e}", flush=True)
+            log_monitor_error(f"Unzip fail {zip_to_extract}: {e}")
+    else:
+        print(f"Memory Analyzers report zip not found with pattern *{zip_pattern}", flush=True)
 
 def extract_mat_suspect_text(run_dir):
-    # Find index.html, which might be in a subdirectory after extraction
-    for root, _, files in os.walk(run_dir):
-        if "index.html" in files:
-            html_report_path = os.path.join(root, "index.html")
-            try:
-                with open(html_report_path, "r", encoding="utf-8", errors="ignore") as f:
-                    soup = BeautifulSoup(f.read(), "lxml")
-                header = soup.find(lambda tag: tag.name in ("h2", "h3") and "Problem Suspect" in tag.get_text())
-                if not header: return "Could not find 'Problem Suspect' section in the MAT report."
-                details_element = header.find_next_sibling("div", class_="details") or header.find_next_sibling("table")
-                if details_element: return details_element.get_text(separator='\n', strip=True)
-                return "Found 'Problem Suspect' header, but no details section followed it."
-            except Exception as e:
-                log_monitor_error(f"Failed to extract text from MAT HTML report: {html_report_path} - {e}"); return f"Error parsing MAT report HTML: {e}"
+    # Find index.html from Memory Analyzers, which might be in a subdirectory after extraction
+    search_roots = [run_dir,
+                    os.path.join(run_dir, "MemoryAnalyzer"),
+                    os.path.join(run_dir, "Memory Analyzers"),
+                    os.path.join(run_dir, "memory-analyzers")]
+    for root_dir in search_roots:
+        if not os.path.isdir(root_dir):
+            continue
+        for root, _, files in os.walk(root_dir):
+            if "index.html" in files:
+                html_report_path = os.path.join(root, "index.html")
+                try:
+                    with open(html_report_path, "r", encoding="utf-8", errors="ignore") as f:
+                        soup = BeautifulSoup(f.read(), "lxml")
+                    header = soup.find(lambda tag: tag.name in ("h2", "h3") and "Problem Suspect" in tag.get_text())
+                    if not header:
+                        return "Could not find 'Problem Suspect' section in the Memory Analyzers report."
+                    details_element = header.find_next_sibling("div", class_="details") or header.find_next_sibling("table")
+                    if details_element:
+                        return details_element.get_text(separator='\n', strip=True)
+                    return "Found 'Problem Suspect' header, but no details section followed it."
+                except Exception as e:
+                    log_monitor_error(f"Failed to extract text from Memory Analyzers HTML report: {html_report_path} - {e}")
+                    return f"Error parsing Memory Analyzers report HTML: {e}"
 
     log_monitor_error(f"Could not find index.html in {run_dir} for summary extraction.")
-    return "MAT report summary file (index.html) not found."
+    print(f"WARNING: Memory Analyzers index.html not found in {run_dir}", flush=True)
+    return "Memory Analyzers report summary file (index.html) not found."
 
 
 def extract_threads_file_content(threads_filepath):
